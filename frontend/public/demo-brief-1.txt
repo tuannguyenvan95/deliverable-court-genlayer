@@ -1,0 +1,1 @@
+Brief: We need a smart contract audit for our ERC20 token. Find any reentrancy bugs and optimize gas.

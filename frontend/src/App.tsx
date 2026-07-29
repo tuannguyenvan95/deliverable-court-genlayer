@@ -92,9 +92,7 @@ export default function App() {
 
   const fillDemoCreateJob = () => {
     const demos = [
-      { t: "High-converting Web3 Landing Page", d: "Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all 4 sections are pixel-perfect.", b: "https://deliverable-court-genlayer.vercel.app", a: "5" },
-      { t: "Smart Contract Audit & Fixes", d: "Audit the attached ERC20 token contract. Fix any reentrancy vulnerabilities and optimize gas usage for the mint function.", b: "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/README.md", a: "12" },
-      { t: "DeFi Dashboard UI Integration", d: "Integrate the new Web3 hooks into the existing React dashboard. Ensure wallet connection works with WalletConnect and MetaMask.", b: "https://en.wikipedia.org/wiki/Smart_contract", a: "8" }
+      { t: "Smart Contract Audit & Fixes", d: "Audit the attached ERC20 token contract. Fix any reentrancy vulnerabilities and optimize gas usage for the mint function.", b: "https://deliverable-court-genlayer.vercel.app/demo-brief-1.txt", a: "12" }
     ];
     const r = demos[Math.floor(Math.random() * demos.length)];
     setTitle(r.t); setDesc(r.d); setBriefUrl(r.b); setAmount(r.a);
@@ -102,9 +100,7 @@ export default function App() {
 
   const fillDemoSubmit = () => {
     const demos = [
-      { u: "https://github.com/tuannguyenvan95/deliverable-court-genlayer", n: "Completed all 4 sections exactly as in the Figma. Fully responsive on mobile. Deployed link is in the README." },
-      { u: "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/contracts/deliverable_court.py", n: "Found 2 reentrancy vectors and fixed them. Gas usage reduced by 15%. Tests are passing." },
-      { u: "https://deliverable-court-genlayer.vercel.app", n: "Integrated all Web3 hooks. Wallet connection is smooth. Tested with MetaMask and TrustWallet." }
+      { u: "https://deliverable-court-genlayer.vercel.app/demo-deliverable-1.txt", n: "Found 2 reentrancy vectors and fixed them. Gas usage reduced by 15%. Tests are passing." }
     ];
     const r = demos[Math.floor(Math.random() * demos.length)];
     setDeliverableUrl(r.u); setNotes(r.n);
