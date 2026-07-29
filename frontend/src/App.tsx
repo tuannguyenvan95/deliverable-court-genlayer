@@ -132,7 +132,7 @@ export default function App() {
       });
     } catch (err) {
       console.error("Fetch jobs error:", err);
-      setJobs(prev => prev.map(j => j.status === 'EVALUATING' ? { ...j, status: 'IN_PROGRESS' } : j));
+      // Removed premature reset of EVALUATING status to prevent UI flickering on RPC errors
     }
   };
 
