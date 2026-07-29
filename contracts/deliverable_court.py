@@ -22,6 +22,7 @@ class Contract(gl.Contract):
     def __init__(self):
         self.next_job_id = bigint(0)
     
+    @gl.public.write
     def create_job(self, title: str, description: str, brief_url: str) -> str:
         amount = gl.msg.value
         if amount <= bigint(0):
@@ -42,6 +43,7 @@ class Contract(gl.Contract):
         )
         return job_id
         
+    @gl.public.write
     def accept_job(self, job_id: str) -> None:
         if job_id not in self.jobs:
             raise UserError("Job does not exist")
@@ -54,6 +56,7 @@ class Contract(gl.Contract):
         job.status = "IN_PROGRESS"
         self.jobs[job_id] = job
         
+    @gl.public.write
     def submit_deliverable(self, job_id: str, deliverable_url: str, notes: str) -> None:
         if job_id not in self.jobs:
             raise UserError("Job does not exist")
@@ -67,6 +70,7 @@ class Contract(gl.Contract):
         job.deliverable_url = deliverable_url + "\nNotes: " + notes
         self.jobs[job_id] = job
         
+    @gl.public.write
     def adjudicate(self, job_id: str) -> None:
         if job_id not in self.jobs:
             raise UserError("Job does not exist")
