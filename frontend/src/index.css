@@ -1,29 +1,58 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer utilities {
-  .glass-panel {
-    @apply bg-surface/40 backdrop-blur-xl border border-border/50 shadow-2xl;
-  }
+@theme {
+  --color-background: #030014;
+  --color-surface: #0f0a29;
+  --color-border: #2a1a5e;
+  --color-primary: #b155ff;
+  --color-secondary: #55b5ff;
+  --font-sans: "Outfit", "Inter", sans-serif;
   
-  .glass-card {
-    @apply bg-white/5 backdrop-blur-md border border-white/10 shadow-xl transition-all duration-300 hover:border-primary/50 hover:bg-white/10;
-  }
-
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  --animate-float: float 6s ease-in-out infinite;
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
   }
 }
 
+.glass-panel {
+  background-color: color-mix(in srgb, var(--color-surface) 40%, transparent);
+  backdrop-filter: blur(24px);
+  border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.glass-card {
+  background-color: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  transition-property: all;
+  transition-duration: 300ms;
+}
+
+.glass-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.text-gradient {
+  background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, var(--color-primary), var(--color-secondary));
+}
+
 body {
-  @apply bg-background text-gray-100 min-h-screen overflow-x-hidden;
+  background-color: var(--color-background);
+  color: #f3f4f6;
+  min-height: 100vh;
+  overflow-x: hidden;
   background-image: 
     radial-gradient(circle at 15% 50%, rgba(177, 85, 255, 0.08) 0%, transparent 50%),
     radial-gradient(circle at 85% 30%, rgba(85, 181, 255, 0.08) 0%, transparent 50%);
 }
 
-/* Custom Scrollbar for a premium feel */
 ::-webkit-scrollbar {
   width: 8px;
 }
