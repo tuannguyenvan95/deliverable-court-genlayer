@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #030014;
-  --color-surface: #0f0a29;
-  --color-border: #2a1a5e;
+  --color-background: #000000;
+  --color-surface: #0a0a0a;
+  --color-border: #222222;
   --color-primary: #b155ff;
   --color-secondary: #55b5ff;
-  --font-sans: "Outfit", "Inter", sans-serif;
+  --font-sans: "Inter", "Geist", system-ui, sans-serif;
   
   --animate-float: float 6s ease-in-out infinite;
   
@@ -16,53 +16,76 @@
   }
 }
 
+body {
+  background-color: var(--color-background);
+  color: #ededed;
+  min-height: 100vh;
+  overflow-x: hidden;
+  /* Premium Developer Grid Background */
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  background-position: center center;
+}
+
+/* Subtle glow behind the entire app */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle at 50% -20%, rgba(177, 85, 255, 0.15), rgba(0,0,0,0) 60%);
+  z-index: -1;
+  pointer-events: none;
+}
+
 .glass-panel {
-  background-color: color-mix(in srgb, var(--color-surface) 40%, transparent);
-  backdrop-filter: blur(24px);
-  border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  background-color: rgba(10, 10, 10, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 }
 
 .glass-card {
-  background-color: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  transition-property: all;
-  transition-duration: 300ms;
+  background-color: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
 }
 
 .glass-card:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .text-gradient {
   background-clip: text;
+  -webkit-background-clip: text;
   color: transparent;
-  background-image: linear-gradient(to right, var(--color-primary), var(--color-secondary));
+  background-image: linear-gradient(to right, #fff, #a1a1aa);
 }
 
-body {
-  background-color: var(--color-background);
-  color: #f3f4f6;
-  min-height: 100vh;
-  overflow-x: hidden;
-  background-image: 
-    radial-gradient(circle at 15% 50%, rgba(177, 85, 255, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 85% 30%, rgba(85, 181, 255, 0.08) 0%, transparent 50%);
+.text-gradient-primary {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: #333;
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: #555;
 }
