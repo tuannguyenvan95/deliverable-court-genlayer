@@ -73,7 +73,12 @@ export default function App() {
       } as any);
       setClient(newClient);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to connect wallet');
+      if (err.message?.includes('already pending')) {
+        setErrorMsg('MetaMask is already open in the background. Please click the MetaMask extension icon in your browser to approve the connection.');
+      } else {
+        setErrorMsg(err.message || 'Failed to connect wallet');
+      }
+      setTimeout(() => setErrorMsg(null), 7000);
     }
   };
 
