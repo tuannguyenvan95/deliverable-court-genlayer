@@ -97,7 +97,10 @@ export default function App() {
         id,
         ...job
       }));
-      setJobs(jobsArray.reverse());
+      setJobs(prev => {
+        const pending = prev.filter(j => j.id.startsWith("PENDING-") && (Date.now() - parseInt(j.id.split('-')[1])) < 15000);
+        return [...pending, ...jobsArray.reverse()];
+      });
     } catch (err) {
       console.error("Fetch jobs error:", err);
     }
@@ -130,9 +133,26 @@ export default function App() {
         value: BigInt(amount),
         account: client.account || { address: account, type: "json-rpc" },
       });
+      const optimisticJob = {
+        id: "PENDING-" + Date.now(),
+        client: account,
+        freelancer: "0x0000000000000000000000000000000000000000",
+        title: title,
+        description: desc,
+        brief_url: briefUrl,
+        deliverable_url: "",
+        amount: amount,
+        status: "OPEN",
+        freelancer_notes: "",
+        ai_verdict: "",
+        ai_reason: "",
+        created_at: Math.floor(Date.now() / 1000)
+      };
+      setJobs(prev => [optimisticJob, ...prev]);
+      
       setTitle(''); setDesc(''); setBriefUrl(''); setAmount('');
-      await fetchJobs();
       setActiveTab('jobs');
+      setTimeout(fetchJobs, 2000);
     } catch (err: any) {
       console.error(err);
       setErrorMsg(`Failed to create job: ${err.message || err.toString()}`);
@@ -244,19 +264,19 @@ export default function App() {
 
         <div className="mt-auto">
           {account ? (
-            <div className="glass-card rounded-lg p-3 flex items-center justify-between gap-3">
+            <div className="glass-card rounded-lg p-3 flex items-center justify-between gap-3 group relative cursor-pointer overflow-hidden" onClick={disconnectWallet}>
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
                   <Wallet size={14} className="text-gray-300" />
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col overflow-hidden">
                   <span className="text-[10px] text-gray-500 font-medium uppercase">Connected</span>
-                  <span className="text-xs font-mono text-gray-200">{account.slice(0, 6)}...{account.slice(-4)}</span>
+                  <span className="text-xs font-mono text-gray-200 truncate">{account.slice(0, 6)}...{account.slice(-4)}</span>
                 </div>
               </div>
-              <button onClick={disconnectWallet} className="text-xs text-red-400 hover:text-red-300 p-1 transition-colors">
+              <div className="absolute inset-0 bg-red-500/20 text-red-400 font-semibold text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md">
                 Disconnect
-              </button>
+              </div>
             </div>
           ) : (
             <button 
