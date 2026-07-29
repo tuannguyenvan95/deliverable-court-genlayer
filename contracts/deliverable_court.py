@@ -14,6 +14,8 @@ class Job:
     status: str
     title: str
     description: str
+    ai_verdict: str
+    ai_reason: str
 
 class Contract(gl.Contract):
     jobs: TreeMap[str, Job]
@@ -39,7 +41,9 @@ class Contract(gl.Contract):
             deliverable_url="",
             status="OPEN",
             title=title,
-            description=description
+            description=description,
+            ai_verdict="",
+            ai_reason=""
         )
         return job_id
         
@@ -93,10 +97,16 @@ class Contract(gl.Contract):
             data = json.loads(raw_json)
             final_verdict = data.get("verdict", "ESCALATE")
             confidence = int(data.get("confidence", 0))
+            reason = data.get("reason", "No reason provided")
             if confidence < 65:
                 final_verdict = "ESCALATE"
+                reason = "Confidence score below 65. Escalate to human review."
         except Exception:
             final_verdict = "ESCALATE"
+            reason = "Failed to parse AI response."
+            
+        job.ai_verdict = final_verdict
+        job.ai_reason = reason
         
         amount = job.amount
         job.amount = bigint(0)

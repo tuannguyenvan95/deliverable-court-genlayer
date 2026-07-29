@@ -1,17 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from 'genlayer-js';
 import { studionet } from 'genlayer-js/chains';
-import { Gavel, Wallet, Briefcase, FileText, CheckCircle, AlertTriangle, LayoutDashboard, Settings, ChevronRight, Zap } from 'lucide-react';
+import { Gavel, Wallet, Briefcase, FileText, CheckCircle, AlertTriangle, LayoutDashboard, Settings, ChevronRight, Zap, Brain, Server, Shield } from 'lucide-react';
 import './index.css';
 
-// HARDCODED to avoid any Vercel environment undefined issues
 const CONTRACT_ADDRESS = "0x41A52a8C1130E0e3f2A6A2e3EF2512c27776aC76";
 
-const client = createClient({
-  chain: studionet,
-});
-
 export default function App() {
+  const [client, setClient] = useState<any>(null);
   const [account, setAccount] = useState<string | null>(null);
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,6 +27,24 @@ export default function App() {
   // Active Tab
   const [activeTab, setActiveTab] = useState('dashboard');
 
+  useEffect(() => {
+    // Initialize default client for reading
+    const initClient = createClient({
+      chain: studionet,
+      provider: typeof window !== 'undefined' ? (window as any).ethereum : undefined
+    });
+    setClient(initClient);
+    
+    // Check if already connected
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      (window as any).ethereum.request({ method: 'eth_accounts' }).then((accounts: string[]) => {
+        if (accounts.length > 0) {
+          setAccount(accounts[0]);
+        }
+      }).catch(console.error);
+    }
+  }, []);
+
   const connectWallet = async () => {
     try {
       if (!(window as any).ethereum) {
@@ -38,13 +52,20 @@ export default function App() {
       }
       const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
       setAccount(accounts[0]);
+      
+      // Re-init client to ensure provider is attached
+      const newClient = createClient({
+        chain: studionet,
+        provider: (window as any).ethereum
+      });
+      setClient(newClient);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to connect wallet');
     }
   };
 
   const fetchJobs = async () => {
-    if (!CONTRACT_ADDRESS) return;
+    if (!CONTRACT_ADDRESS || !client) return;
     try {
       const allJobsStr: string = await client.readContract({
         address: CONTRACT_ADDRESS as any,
@@ -58,18 +79,20 @@ export default function App() {
       }));
       setJobs(jobsArray.reverse());
     } catch (err) {
-      console.error(err);
+      console.error("Fetch jobs error:", err);
     }
   };
 
   useEffect(() => {
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    if (client) {
+      fetchJobs();
+      const interval = setInterval(fetchJobs, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [client]);
 
   const clearError = () => {
-    setTimeout(() => setErrorMsg(null), 5000);
+    setTimeout(() => setErrorMsg(null), 7000);
   };
 
   const createJob = async (e: React.FormEvent) => {
@@ -193,8 +216,11 @@ export default function App() {
           >
             <Briefcase size={18} className={activeTab === 'jobs' ? 'text-primary' : ''} /> Escrow Contracts
           </button>
-          <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all duration-300 border border-transparent">
-            <Settings size={18} /> Protocol Settings
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${activeTab === 'settings' ? 'bg-primary/10 text-white border border-primary/20 shadow-[inset_0_0_20px_rgba(177,85,255,0.05)]' : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'}`}
+          >
+            <Settings size={18} className={activeTab === 'settings' ? 'text-primary' : ''} /> Protocol Settings
           </button>
         </nav>
 
@@ -232,7 +258,7 @@ export default function App() {
             <div className="bg-red-500/10 backdrop-blur-xl border border-red-500/30 text-red-400 px-6 py-4 rounded-2xl shadow-[0_0_30px_rgba(239,68,68,0.2)] flex items-start gap-4 max-w-md">
               <AlertTriangle size={24} className="shrink-0 mt-0.5" />
               <div className="flex flex-col gap-1">
-                <span className="font-bold text-red-300">Transaction Failed</span>
+                <span className="font-bold text-red-300">Transaction Error</span>
                 <span className="text-sm leading-relaxed">{errorMsg}</span>
               </div>
             </div>
@@ -242,20 +268,66 @@ export default function App() {
         <header className="px-10 py-8 flex justify-between items-center sticky top-0 bg-background/60 backdrop-blur-xl border-b border-border/30 z-40">
           <div className="flex flex-col">
             <h1 className="text-3xl font-bold text-white tracking-tight">
-              {activeTab === 'dashboard' ? 'Overview' : 'Escrow Contracts'}
+              {activeTab === 'dashboard' ? 'Overview' : activeTab === 'jobs' ? 'Escrow Contracts' : 'Protocol Configurations'}
             </h1>
-            <p className="text-gray-400 text-sm mt-1">Intelligent dispute resolution powered by GenLayer.</p>
+            <p className="text-gray-400 text-sm mt-1">Intelligent dispute resolution powered by GenLayer LLM.</p>
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="px-4 py-2 rounded-full glass-card flex items-center gap-2 text-sm font-medium text-gray-300">
+            <div className="px-4 py-2 rounded-full glass-card flex items-center gap-2 text-sm font-medium text-gray-300 border-primary/20">
+              <Brain size={16} className="text-primary" />
+              AI Evaluator Active
+            </div>
+            <div className="px-4 py-2 rounded-full glass-card flex items-center gap-2 text-sm font-medium text-gray-300 border-green-500/20">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.6)]"></div>
-              Network: GenLayer StudioNet
+              StudioNet
             </div>
           </div>
         </header>
 
         <div className="p-10 max-w-7xl w-full mx-auto pb-24">
+          
+          {/* SETTINGS TAB */}
+          {activeTab === 'settings' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="glass-panel rounded-3xl p-8 mb-8 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-12 opacity-5 text-primary">
+                  <Server size={200} />
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+                  <Shield className="text-primary" size={28} /> Protocol Core Settings
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                  <div className="bg-black/40 border border-border/50 rounded-2xl p-6">
+                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Smart Contract Address</h3>
+                    <div className="flex items-center gap-3">
+                      <code className="text-lg text-white font-mono bg-white/5 px-4 py-2 rounded-xl flex-1">{CONTRACT_ADDRESS}</code>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-black/40 border border-border/50 rounded-2xl p-6">
+                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">GenLayer RPC Endpoint</h3>
+                    <div className="flex items-center gap-3">
+                      <code className="text-lg text-white font-mono bg-white/5 px-4 py-2 rounded-xl flex-1">https://studio.genlayer.com/rpc</code>
+                    </div>
+                  </div>
+
+                  <div className="bg-primary/10 border border-primary/20 rounded-2xl p-6 md:col-span-2 flex gap-6 items-center">
+                    <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
+                      <Brain size={32} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-1">GenLayer AI Validator (LLM)</h3>
+                      <p className="text-gray-300">The protocol uses GenLayer's built-in non-deterministic LLM consensus to evaluate design (Figma), code (GitHub), and docs (Notion) directly from URLs without human intervention.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Stats Grid */}
@@ -290,15 +362,15 @@ export default function App() {
                     <form onSubmit={createJob} className="space-y-5">
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-400">Project Title</label>
-                        <input required className="w-full bg-black/40 border border-border/50 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Smart Contract Audit" />
+                        <input required className="w-full bg-black/40 border border-border/50 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. High-end UI Design (Figma)" />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Description</label>
-                        <textarea required className="w-full bg-black/40 border border-border/50 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-[100px] resize-y" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Detailed requirements..."></textarea>
+                        <label className="text-sm font-medium text-gray-400">Scope of Work</label>
+                        <textarea required className="w-full bg-black/40 border border-border/50 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-[100px] resize-y" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Detailed requirements for the AI to judge against..."></textarea>
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Brief Document URL (Public)</label>
-                        <input required type="url" className="w-full bg-black/40 border border-border/50 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" value={briefUrl} onChange={e => setBriefUrl(e.target.value)} placeholder="https://docs.google.com/..." />
+                        <label className="text-sm font-medium text-gray-400">Original Brief (Public URL)</label>
+                        <input required type="url" className="w-full bg-black/40 border border-border/50 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" value={briefUrl} onChange={e => setBriefUrl(e.target.value)} placeholder="https://docs.google.com/... or Notion link" />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-400">Escrow Amount (Wei)</label>
@@ -323,7 +395,7 @@ export default function App() {
                       <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/3"></div>
                       
                       <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
-                        <FileText className="text-primary" size={24} /> Submit Deliverable
+                        <FileText className="text-primary" size={24} /> Submit Final Deliverable
                       </h2>
                       <p className="text-gray-400 mb-8 flex items-center gap-2">
                         Targeting Job ID: <span className="font-mono bg-black/50 px-3 py-1 rounded-lg text-primary">{activeJobId}</span>
@@ -331,16 +403,16 @@ export default function App() {
                       
                       <form onSubmit={submitDeliverable} className="space-y-6 relative z-10">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-300">Deliverable URL (Public Resource)</label>
-                          <input required type="url" className="w-full bg-black/60 border border-border/50 text-white px-5 py-4 rounded-2xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" value={deliverableUrl} onChange={e => setDeliverableUrl(e.target.value)} placeholder="https://github.com/..." />
+                          <label className="text-sm font-medium text-gray-300">Deliverable Asset URL (Figma, GitHub, Notion)</label>
+                          <input required type="url" className="w-full bg-black/60 border border-border/50 text-white px-5 py-4 rounded-2xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" value={deliverableUrl} onChange={e => setDeliverableUrl(e.target.value)} placeholder="https://www.figma.com/..." />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-300">Execution Notes for AI Validator</label>
-                          <textarea className="w-full bg-black/60 border border-border/50 text-white px-5 py-4 rounded-2xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-[120px]" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Explain how you fulfilled the requirements..."></textarea>
+                          <label className="text-sm font-medium text-gray-300">Pitch & Notes for AI Evaluator</label>
+                          <textarea className="w-full bg-black/60 border border-border/50 text-white px-5 py-4 rounded-2xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all min-h-[120px]" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Explain to the GenLayer LLM how your work meets the original brief..."></textarea>
                         </div>
                         <div className="flex gap-4 pt-4">
                           <button type="submit" disabled={loading} className="flex-2 bg-white text-black hover:bg-gray-200 px-8 py-4 rounded-xl font-bold transition-colors flex-grow text-center">
-                            Submit Final Work
+                            Submit to Protocol
                           </button>
                           <button type="button" onClick={() => setActiveJobId(null)} className="flex-1 bg-surface border border-border/50 text-white hover:bg-white/5 px-8 py-4 rounded-xl font-bold transition-colors">
                             Cancel
@@ -350,11 +422,12 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="glass-panel rounded-3xl flex flex-col items-center justify-center min-h-[400px] border-dashed text-gray-500 text-center px-10">
-                      <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6">
-                        <Briefcase size={32} className="text-gray-400" />
+                      <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center mb-6 relative">
+                        <div className="absolute inset-0 border border-white/10 rounded-full animate-ping opacity-20"></div>
+                        <Brain size={40} className="text-primary/50" />
                       </div>
-                      <h3 className="text-xl font-semibold text-gray-300 mb-2">No Active Context</h3>
-                      <p className="max-w-md">Navigate to the "Escrow Contracts" tab to browse available jobs or select a job to submit your deliverable.</p>
+                      <h3 className="text-xl font-semibold text-gray-300 mb-2">AI Awaiting Context</h3>
+                      <p className="max-w-md">Navigate to the "Escrow Contracts" tab to browse available jobs or select an In-Progress job to submit your deliverable for LLM evaluation.</p>
                     </div>
                   )}
                 </div>
@@ -362,6 +435,7 @@ export default function App() {
             </div>
           )}
 
+          {/* JOBS TAB */}
           {activeTab === 'jobs' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
               {jobs.length === 0 ? (
@@ -396,26 +470,47 @@ export default function App() {
                           {job.description}
                         </p>
                         
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 bg-black/40 rounded-2xl p-4 border border-white/5">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 bg-black/40 rounded-2xl p-4 border border-white/5 mb-6">
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Client Address</span>
+                            <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Client</span>
                             <span className="font-mono text-sm text-gray-200">{job.client.slice(0,6)}...{job.client.slice(-4)}</span>
                           </div>
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Escrow Amount</span>
+                            <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Amount</span>
                             <span className="font-mono text-sm text-primary font-bold">{job.amount} WEI</span>
                           </div>
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Brief</span>
-                            <a href={job.brief_url} target="_blank" rel="noreferrer" className="text-sm text-secondary hover:underline flex items-center gap-1">View Docs <ChevronRight size={14} /></a>
+                            <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Original Brief</span>
+                            <a href={job.brief_url} target="_blank" rel="noreferrer" className="text-sm text-secondary hover:underline flex items-center gap-1">View Source <ChevronRight size={14} /></a>
                           </div>
                           {job.deliverable_url && (
                             <div className="flex flex-col gap-1">
-                              <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Deliverable</span>
-                              <a href={job.deliverable_url.split('\n')[0]} target="_blank" rel="noreferrer" className="text-sm text-green-400 hover:underline flex items-center gap-1">Review Work <ChevronRight size={14} /></a>
+                              <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Deliverable Asset</span>
+                              <a href={job.deliverable_url.split('\n')[0]} target="_blank" rel="noreferrer" className="text-sm text-green-400 hover:underline flex items-center gap-1">Open Link <ChevronRight size={14} /></a>
                             </div>
                           )}
                         </div>
+
+                        {/* AI VERDICT DISPLAY */}
+                        {job.status === 'CLOSED' && job.ai_verdict && (
+                          <div className={`mt-2 p-5 rounded-2xl border flex flex-col gap-3 ${
+                            job.ai_verdict === 'RELEASE' ? 'bg-green-500/10 border-green-500/20' : 
+                            job.ai_verdict === 'REFUND' ? 'bg-red-500/10 border-red-500/20' : 
+                            'bg-yellow-500/10 border-yellow-500/20'
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              <Brain size={20} className={
+                                job.ai_verdict === 'RELEASE' ? 'text-green-400' : 
+                                job.ai_verdict === 'REFUND' ? 'text-red-400' : 
+                                'text-yellow-400'
+                              } />
+                              <h4 className="font-bold text-white uppercase tracking-wider text-sm">GenLayer AI Verdict: {job.ai_verdict}</h4>
+                            </div>
+                            <p className="text-sm text-gray-300 leading-relaxed italic border-l-2 border-white/20 pl-4 py-1">
+                              "{job.ai_reason}"
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Panel */}
@@ -435,17 +530,17 @@ export default function App() {
                         {job.status === 'IN_PROGRESS' && job.deliverable_url && (
                           <button onClick={() => adjudicate(job.id)} disabled={loading} className="w-full relative group overflow-hidden rounded-xl p-[1px]">
                             <span className="absolute inset-0 bg-gradient-to-r from-primary to-secondary opacity-100 group-hover:scale-110 transition-transform duration-500"></span>
-                            <div className="relative bg-background/50 backdrop-blur-sm px-6 py-4 flex flex-col items-center gap-1 group-hover:bg-transparent transition-colors">
-                              <Gavel size={24} className="text-white" />
-                              <span className="font-bold text-white">AI Adjudicate</span>
+                            <div className="relative bg-background/50 backdrop-blur-sm px-6 py-4 flex flex-col items-center gap-2 group-hover:bg-transparent transition-colors">
+                              <Brain size={24} className="text-white animate-pulse" />
+                              <span className="font-bold text-white text-center">Run GenLayer AI Evaluator</span>
                             </div>
                           </button>
                         )}
 
                         {job.status === 'CLOSED' && (
-                          <div className="w-full bg-green-500/10 border border-green-500/20 text-green-400 px-6 py-4 rounded-xl font-bold flex flex-col items-center justify-center gap-2">
-                            <CheckCircle size={24} />
-                            Resolution Complete
+                          <div className="w-full bg-surface border border-border/50 text-gray-400 px-6 py-4 rounded-xl font-bold flex flex-col items-center justify-center gap-2">
+                            <Shield size={24} />
+                            Contract Resolved
                           </div>
                         )}
                       </div>
@@ -465,10 +560,10 @@ export default function App() {
             <div className="absolute inset-0 border-t-2 border-primary rounded-full animate-spin"></div>
             <div className="absolute inset-2 border-r-2 border-secondary rounded-full animate-[spin_2s_reverse_infinite]"></div>
             <div className="absolute inset-4 border-b-2 border-white rounded-full animate-[spin_3s_linear_infinite]"></div>
-            <Gavel size={32} className="text-white animate-pulse" />
+            <Brain size={32} className="text-white animate-pulse" />
           </div>
-          <h2 className="text-3xl font-bold text-white tracking-tight mb-3">GenLayer Consensus</h2>
-          <p className="text-gray-400 max-w-md text-center">Intelligent Smart Contracts are analyzing the context and resolving the escrow transaction.</p>
+          <h2 className="text-3xl font-bold text-white tracking-tight mb-3">GenLayer AI Analyzing...</h2>
+          <p className="text-gray-400 max-w-md text-center">The intelligent contract is reading URLs, evaluating design/code quality, and reaching consensus.</p>
         </div>
       )}
     </div>
