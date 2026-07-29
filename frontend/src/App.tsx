@@ -176,7 +176,8 @@ export default function App() {
               return {
                 ...job,
                 status: 'CLOSED',
-                ai_verdict: '{"verdict": "RELEASE", "reason": "The GenLayer AI has verified that the deliverable strictly matches the brief requirements. All checks passed successfully.", "confidence": 99}'
+                ai_verdict: 'RELEASE',
+                ai_reason: 'The GenLayer AI has verified that the deliverable strictly matches the brief requirements. All checks passed successfully.'
               };
             }
           }
