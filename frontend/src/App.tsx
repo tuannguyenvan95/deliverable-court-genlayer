@@ -22,7 +22,20 @@ export default function App() {
   // Submit deliverable form
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [deliverableUrl, setDeliverableUrl] = useState('');
+  const [demoUrl, setDemoUrl] = useState('');
   const [notes, setNotes] = useState('');
+
+  const parseGenToWei = (gen: string) => {
+    try {
+      const parts = gen.split('.');
+      let whole = parts[0] || '0';
+      let fraction = parts[1] || '';
+      fraction = fraction.padEnd(18, '0').slice(0, 18);
+      return BigInt(whole + fraction);
+    } catch {
+      return 0n;
+    }
+  };
 
   // Active Tab
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -74,9 +87,9 @@ export default function App() {
 
   const fillDemoCreateJob = () => {
     const demos = [
-      { t: "High-converting Web3 Landing Page", d: "Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all 4 sections are pixel-perfect.", b: "https://www.notion.so/Web3-Landing-Page-Brief", a: "5000000000000000000" },
-      { t: "Smart Contract Audit & Fixes", d: "Audit the attached ERC20 token contract. Fix any reentrancy vulnerabilities and optimize gas usage for the mint function.", b: "https://github.com/demo/erc20-audit-brief", a: "12000000000000000000" },
-      { t: "DeFi Dashboard UI Integration", d: "Integrate the new Web3 hooks into the existing React dashboard. Ensure wallet connection works with WalletConnect and MetaMask.", b: "https://www.figma.com/file/demo-defi-dashboard", a: "8000000000000000000" }
+      { t: "High-converting Web3 Landing Page", d: "Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all 4 sections are pixel-perfect.", b: "https://www.notion.so/Web3-Landing-Page-Brief", a: "5" },
+      { t: "Smart Contract Audit & Fixes", d: "Audit the attached ERC20 token contract. Fix any reentrancy vulnerabilities and optimize gas usage for the mint function.", b: "https://github.com/demo/erc20-audit-brief", a: "12" },
+      { t: "DeFi Dashboard UI Integration", d: "Integrate the new Web3 hooks into the existing React dashboard. Ensure wallet connection works with WalletConnect and MetaMask.", b: "https://www.figma.com/file/demo-defi-dashboard", a: "8" }
     ];
     const r = demos[Math.floor(Math.random() * demos.length)];
     setTitle(r.t); setDesc(r.d); setBriefUrl(r.b); setAmount(r.a);
@@ -138,7 +151,7 @@ export default function App() {
         address: CONTRACT_ADDRESS as any,
         functionName: 'create_job',
         args: [title, desc, briefUrl],
-        value: BigInt(amount),
+        value: parseGenToWei(amount),
         account: client.account || { address: account, type: "json-rpc" },
       });
       const optimisticJob = {
@@ -149,7 +162,7 @@ export default function App() {
         description: desc,
         brief_url: briefUrl,
         deliverable_url: "",
-        amount: amount,
+        amount: parseGenToWei(amount).toString(),
         status: "OPEN",
         freelancer_notes: "",
         ai_verdict: "",
@@ -199,13 +212,21 @@ export default function App() {
       await client.writeContract({
         address: CONTRACT_ADDRESS as any,
         functionName: 'submit_deliverable',
-        args: [activeJobId, deliverableUrl, notes],
+    const finalUrl = deliverableUrl || demoUrl;
+    const finalNotes = `Live Demo: ${demoUrl}\n\nTesting Instructions/Notes:\n${notes}`;
+
+    try {
+      await client.writeContract({
+        address: CONTRACT_ADDRESS as any,
+        functionName: 'submit_deliverable',
+        args: [activeJobId, finalUrl, finalNotes],
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, deliverable_url: deliverableUrl, freelancer_notes: notes } : j));
+      setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, deliverable_url: finalUrl, freelancer_notes: finalNotes } : j));
       setActiveJobId(null);
       setDeliverableUrl('');
+      setDemoUrl('');
       setNotes('');
       setActiveTab('jobs');
       setTimeout(fetchJobs, 2000);
@@ -420,8 +441,8 @@ export default function App() {
                         <input required type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={briefUrl} onChange={e => setBriefUrl(e.target.value)} placeholder="https://docs.google.com/..." />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-gray-400">Escrow Amount (Wei)</label>
-                        <input required type="number" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={amount} onChange={e => setAmount(e.target.value)} placeholder="1000000000000000000" />
+                        <label className="text-xs font-medium text-gray-400">Escrow Amount (GEN)</label>
+                        <input required type="number" step="any" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 5" />
                       </div>
                       
                       <button disabled={loading || !account} type="submit" className="w-full mt-4 bg-white text-black py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors disabled:bg-white/20 disabled:text-gray-400">
@@ -447,17 +468,23 @@ export default function App() {
                         </p>
                         
                         <form onSubmit={submitDeliverable} className="space-y-4 flex-1 flex flex-col">
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-gray-400">Deliverable Asset URL</label>
-                            <input required type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={deliverableUrl} onChange={e => setDeliverableUrl(e.target.value)} placeholder="https://www.figma.com/..." />
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-gray-400">Main Repository / Source (URL)</label>
+                              <input required type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={deliverableUrl} onChange={e => setDeliverableUrl(e.target.value)} placeholder="https://github.com/..." />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-gray-400">Live Demo (Optional URL)</label>
+                              <input type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={demoUrl} onChange={e => setDemoUrl(e.target.value)} placeholder="https://demo.vercel.app/..." />
+                            </div>
                           </div>
                           <div className="space-y-1.5 flex-1 flex flex-col">
-                            <label className="text-xs font-medium text-gray-400">Pitch for AI Evaluator</label>
-                            <textarea className="w-full flex-1 bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors min-h-[120px]" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Explain how your work meets the original brief..."></textarea>
+                            <label className="text-xs font-medium text-gray-400">Testing Instructions & Pitch for AI Evaluator</label>
+                            <textarea className="w-full flex-1 bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors min-h-[120px]" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Explain how your work meets the original brief, where to click, how to test..."></textarea>
                           </div>
                           <div className="flex gap-3 pt-2">
                             <button type="submit" disabled={loading} className="flex-2 bg-white text-black px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors flex-grow">
-                              Submit
+                              Submit Project
                             </button>
                             <button type="button" onClick={() => setActiveJobId(null)} className="flex-1 bg-transparent border border-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-white/5 transition-colors">
                               Cancel
@@ -575,7 +602,7 @@ export default function App() {
                             </div>
                             <div className="flex flex-col gap-1">
                               <span className="text-[9px] text-gray-500 uppercase font-semibold">Amount</span>
-                              <span className="font-mono text-xs text-white">{job.amount} WEI</span>
+                              <span className="font-mono text-xs text-white">{(Number(job.amount) / 1e18).toString()} GEN</span>
                             </div>
                             <div className="flex flex-col gap-1">
                               <span className="text-[9px] text-gray-500 uppercase font-semibold">Brief</span>
