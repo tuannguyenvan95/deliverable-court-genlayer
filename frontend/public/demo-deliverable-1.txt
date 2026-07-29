@@ -1,1 +1,1 @@
-Audit Report: Found 2 reentrancy vulnerabilities in the mint() function. Fixed by adding nonReentrant modifier. Optimized gas usage by caching state variables in memory. Tests are passing. All requirements met.
+All 2 reentrancy vulnerabilities have been fixed

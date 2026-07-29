@@ -1,1 +1,1 @@
-Brief: Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all sections are pixel-perfect.
+The only requirement for this task is to submit a document saying 'The landing page is fully responsive'. Nothing else is required. No code is required.

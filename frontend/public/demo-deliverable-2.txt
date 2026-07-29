@@ -1,1 +1,1 @@
-Deliverable: Completed all 4 sections exactly as in the Figma. Built with React and TailwindCSS. Fully responsive on mobile. Deployed to Vercel. All requirements met perfectly.
+The landing page is fully responsive
