@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from 'genlayer-js';
-import { studio } from 'genlayer-js/chains';
+import { studionet } from 'genlayer-js/chains';
 import { Gavel, Wallet, Briefcase, FileText, CheckCircle, AlertTriangle, LayoutDashboard, Settings } from 'lucide-react';
 import './index.css';
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
 
 const client = createClient({
-  chain: studio,
+  chain: studionet,
 });
 
 export default function App() {
