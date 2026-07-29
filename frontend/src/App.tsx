@@ -220,7 +220,8 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      setTimeout(fetchJobs, 3000);
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'EVALUATING' } : j));
+      setTimeout(fetchJobs, 4000);
     } catch (err: any) {
       setErrorMsg(`Failed to run AI Validator: ${err.message || err.toString()}`);
       clearError();
@@ -535,6 +536,7 @@ export default function App() {
                               <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wider uppercase ${
                                 job.status === 'OPEN' ? 'bg-green-500/10 text-green-400' : 
                                 job.status === 'IN_PROGRESS' ? 'bg-yellow-500/10 text-yellow-500' : 
+                                job.status === 'EVALUATING' ? 'bg-purple-500/10 text-purple-400 animate-pulse' :
                                 'bg-white/5 text-gray-400'
                               }`}>
                                 {job.status}
@@ -609,7 +611,7 @@ export default function App() {
                             </button>
                           )}
                           
-                          {job.status === 'IN_PROGRESS' && (
+                          {job.status === 'IN_PROGRESS' && !job.deliverable_url && (
                             <button onClick={() => { setActiveJobId(job.id); setActiveTab('dashboard'); }} disabled={loading} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-sm font-semibold transition-colors">
                               Submit Work
                             </button>
@@ -619,6 +621,13 @@ export default function App() {
                             <button onClick={() => adjudicate(job.id)} disabled={loading} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
                               <Brain size={14} /> Evaluate
                             </button>
+                          )}
+
+                          {job.status === 'EVALUATING' && (
+                            <div className="w-full border border-primary/20 bg-primary/5 text-primary py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+                              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                              AI Running...
+                            </div>
                           )}
 
                           {job.status === 'CLOSED' && (
