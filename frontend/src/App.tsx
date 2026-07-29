@@ -173,7 +173,8 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      await fetchJobs();
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'IN_PROGRESS', freelancer: account } : j));
+      setTimeout(fetchJobs, 2000);
     } catch (err: any) {
       setErrorMsg(`Failed to accept job: ${err.message || err.toString()}`);
       clearError();
@@ -194,10 +195,12 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
+      setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, deliverable_url: deliverableUrl, freelancer_notes: notes } : j));
       setActiveJobId(null);
       setDeliverableUrl('');
       setNotes('');
-      await fetchJobs();
+      setActiveTab('jobs');
+      setTimeout(fetchJobs, 2000);
     } catch (err: any) {
       setErrorMsg(`Failed to submit work: ${err.message || err.toString()}`);
       clearError();
@@ -217,7 +220,7 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      await fetchJobs();
+      setTimeout(fetchJobs, 3000);
     } catch (err: any) {
       setErrorMsg(`Failed to run AI Validator: ${err.message || err.toString()}`);
       clearError();
@@ -601,12 +604,12 @@ export default function App() {
                         {/* Action Panel */}
                         <div className="w-full lg:w-48 lg:border-l border-white/5 lg:pl-6 flex flex-col justify-center gap-3">
                           {job.status === 'OPEN' && (
-                            <button onClick={() => acceptJob(job.id)} disabled={loading || !account || account.toLowerCase() === job.client.toLowerCase()} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                            <button onClick={() => acceptJob(job.id)} disabled={loading || !account} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
                               Accept Job
                             </button>
                           )}
                           
-                          {job.status === 'IN_PROGRESS' && account?.toLowerCase() === job.freelancer.toLowerCase() && (
+                          {job.status === 'IN_PROGRESS' && (
                             <button onClick={() => { setActiveJobId(job.id); setActiveTab('dashboard'); }} disabled={loading} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-sm font-semibold transition-colors">
                               Submit Work
                             </button>
