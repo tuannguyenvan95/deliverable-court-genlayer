@@ -64,6 +64,18 @@ export default function App() {
     }
   };
 
+  const fillDemoCreateJob = () => {
+    setTitle("High-converting Web3 Landing Page");
+    setDesc("Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all 4 sections are pixel-perfect.");
+    setBriefUrl("https://www.notion.so/Web3-Landing-Page-Brief");
+    setAmount("5000000000000000000");
+  };
+
+  const fillDemoSubmit = () => {
+    setDeliverableUrl("https://github.com/demo/web3-landing-page");
+    setNotes("Completed all 4 sections exactly as in the Figma. Fully responsive on mobile. Deployed link is in the README.");
+  };
+
   const fetchJobs = async () => {
     if (!CONTRACT_ADDRESS || !client) return;
     try {
@@ -384,9 +396,14 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Create Job Form */}
                   <div className="glass-panel rounded-xl p-8">
-                    <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                      Deploy New Escrow
-                    </h2>
+                    <div className="flex items-center justify-between mb-6">
+                      <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                        Deploy New Escrow
+                      </h2>
+                      <button onClick={fillDemoCreateJob} type="button" className="text-[10px] bg-white/10 hover:bg-white/20 text-gray-300 px-3 py-1.5 rounded uppercase font-bold transition-colors">
+                        Auto-fill Demo Data
+                      </button>
+                    </div>
                     
                     <form onSubmit={createJob} className="space-y-4">
                       <div className="space-y-1.5">
@@ -416,9 +433,14 @@ export default function App() {
                   <div className="flex flex-col h-full">
                     {activeJobId ? (
                       <div className="glass-panel rounded-xl p-8 border-primary/20 flex-1 flex flex-col">
-                        <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-                          Submit Final Deliverable
-                        </h2>
+                        <div className="flex items-center justify-between mb-2">
+                          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            Submit Final Deliverable
+                          </h2>
+                          <button onClick={fillDemoSubmit} type="button" className="text-[10px] bg-white/10 hover:bg-white/20 text-gray-300 px-3 py-1.5 rounded uppercase font-bold transition-colors">
+                            Auto-fill Demo Data
+                          </button>
+                        </div>
                         <p className="text-xs text-gray-500 mb-6">
                           Targeting Job ID: <span className="font-mono text-gray-300 ml-1">{activeJobId}</span>
                         </p>
