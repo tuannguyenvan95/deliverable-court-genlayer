@@ -208,10 +208,7 @@ export default function App() {
     if (!account || !activeJobId) return;
     setLoading(true);
     setErrorMsg(null);
-    try {
-      await client.writeContract({
-        address: CONTRACT_ADDRESS as any,
-        functionName: 'submit_deliverable',
+    
     const finalUrl = deliverableUrl || demoUrl;
     const finalNotes = `Live Demo: ${demoUrl}\n\nTesting Instructions/Notes:\n${notes}`;
 
