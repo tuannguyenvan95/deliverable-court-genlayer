@@ -129,13 +129,15 @@ class Contract(gl.Contract):
         self.jobs[job_id] = job
 
     def _adjudicate_leader(self, brief_url: str, deliverable_url: str) -> str:
+        import json
+        
         brief_res = gl.nondet.web.render(brief_url)
         if not brief_res.ok:
-            raise UserError(f"Failed to fetch brief")
+            return json.dumps({"verdict": "ESCALATE", "reason": f"Failed to fetch brief URL. It might be invalid, private, or a 404.", "confidence": 100})
             
         deliv_res = gl.nondet.web.render(deliverable_url.split("\nNotes: ")[0])
         if not deliv_res.ok:
-            raise UserError(f"Failed to fetch deliverable")
+            return json.dumps({"verdict": "ESCALATE", "reason": f"Failed to fetch deliverable URL. It might be invalid, private, or a 404.", "confidence": 100})
             
         prompt = f"""
         You are an expert project manager and judge. 
