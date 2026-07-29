@@ -125,7 +125,14 @@ export default function App() {
       }));
       setJobs(prev => {
         const pending = prev.filter(j => j.id.startsWith("PENDING-") && (Date.now() - parseInt(j.id.split('-')[1])) < 15000);
-        return [...pending, ...jobsArray.reverse()];
+        return [...pending, ...jobsArray.reverse()].map(newJob => {
+          const oldJob = prev.find(p => p.id === newJob.id);
+          // If UI is EVALUATING but backend hasn't processed it yet (ai_verdict empty), keep EVALUATING for up to 45s
+          if (oldJob && oldJob.status === 'EVALUATING' && !newJob.ai_verdict && oldJob.eval_start && (Date.now() - oldJob.eval_start < 45000)) {
+            return { ...newJob, status: 'EVALUATING', eval_start: oldJob.eval_start };
+          }
+          return newJob;
+        });
       });
     } catch (err) {
       console.error("Fetch jobs error:", err);
@@ -252,13 +259,13 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      // Set evaluating state optimistically
-      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'EVALUATING' } : j));
+      // Set evaluating state optimistically with a timestamp
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'EVALUATING', eval_start: Date.now() } : j));
       
       // Fetch aggressively to get the result
-      setTimeout(fetchJobs, 2000);
-      setTimeout(fetchJobs, 6000);
-      setTimeout(fetchJobs, 12000);
+      setTimeout(fetchJobs, 5000);
+      setTimeout(fetchJobs, 15000);
+      setTimeout(fetchJobs, 25000);
     } catch (err: any) {
       setErrorMsg(`Failed to run AI Validator: ${err.message || err.toString()}`);
       clearError();
