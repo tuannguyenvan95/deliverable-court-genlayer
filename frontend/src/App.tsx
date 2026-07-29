@@ -114,7 +114,7 @@ export default function App() {
         n = "Integrated all Web3 hooks. Wallet connection is smooth. Tested thoroughly with MetaMask and WalletConnect. No errors in console. Meets all requirements.";
       }
     }
-    setDeliverableUrl(u); setNotes(n);
+    setDeliverableUrl(u); setNotes(n); setDemoUrl('');
   };
 
   const fetchJobs = async () => {
@@ -556,7 +556,7 @@ export default function App() {
                         </p>
                         
                         <form onSubmit={submitDeliverable} className="space-y-4 flex-1 flex flex-col">
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                               <label className="text-xs font-medium text-gray-400">Main Repository / Source (URL)</label>
                               <input required type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={deliverableUrl} onChange={e => setDeliverableUrl(e.target.value)} placeholder="https://github.com/..." />
