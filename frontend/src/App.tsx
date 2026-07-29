@@ -53,7 +53,6 @@ export default function App() {
       const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
       setAccount(accounts[0]);
       
-      // Re-init client to ensure provider is attached
       const newClient = createClient({
         chain: studionet,
         provider: (window as any).ethereum
@@ -62,6 +61,14 @@ export default function App() {
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to connect wallet');
     }
+  };
+
+  const disconnectWallet = () => {
+    setAccount(null);
+    const readOnlyClient = createClient({
+      chain: studionet,
+    });
+    setClient(readOnlyClient);
   };
 
   const fillDemoCreateJob = () => {
@@ -110,6 +117,8 @@ export default function App() {
   const createJob = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!account) return setErrorMsg('Connect wallet first');
+    if (!CONTRACT_ADDRESS) return setErrorMsg('CRITICAL: CONTRACT_ADDRESS is undefined in the code. Please clear browser cache.');
+    if (account === "undefined") return setErrorMsg('CRITICAL: Account is evaluating to the string "undefined". Re-connect wallet.');
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -234,14 +243,19 @@ export default function App() {
 
         <div className="mt-auto">
           {account ? (
-            <div className="glass-card rounded-lg p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-                <Wallet size={14} className="text-gray-300" />
+            <div className="glass-card rounded-lg p-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                  <Wallet size={14} className="text-gray-300" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-gray-500 font-medium uppercase">Connected</span>
+                  <span className="text-xs font-mono text-gray-200">{account.slice(0, 6)}...{account.slice(-4)}</span>
+                </div>
               </div>
-              <div className="flex flex-col">
-                <span className="text-[10px] text-gray-500 font-medium uppercase">Connected</span>
-                <span className="text-xs font-mono text-gray-200">{account.slice(0, 6)}...{account.slice(-4)}</span>
-              </div>
+              <button onClick={disconnectWallet} className="text-xs text-red-400 hover:text-red-300 p-1 transition-colors">
+                Disconnect
+              </button>
             </div>
           ) : (
             <button 
