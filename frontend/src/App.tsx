@@ -55,8 +55,9 @@ export default function App() {
       
       const newClient = createClient({
         chain: studionet,
-        provider: (window as any).ethereum
-      });
+        provider: (window as any).ethereum,
+        account: accounts[0]
+      } as any);
       setClient(newClient);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to connect wallet');
@@ -127,7 +128,7 @@ export default function App() {
         functionName: 'create_job',
         args: [title, desc, briefUrl],
         value: BigInt(amount),
-        account: account as any,
+        account: client.account || { address: account, type: "json-rpc" },
       });
       setTitle(''); setDesc(''); setBriefUrl(''); setAmount('');
       await fetchJobs();
@@ -150,7 +151,7 @@ export default function App() {
         functionName: 'accept_job',
         args: [jobId],
         value: 0n,
-        account: account as any,
+        account: client.account || { address: account, type: "json-rpc" },
       });
       await fetchJobs();
     } catch (err: any) {
@@ -171,7 +172,7 @@ export default function App() {
         functionName: 'submit_deliverable',
         args: [activeJobId, deliverableUrl, notes],
         value: 0n,
-        account: account as any,
+        account: client.account || { address: account, type: "json-rpc" },
       });
       setActiveJobId(null);
       setDeliverableUrl('');
@@ -194,7 +195,7 @@ export default function App() {
         functionName: 'adjudicate',
         args: [jobId],
         value: 0n,
-        account: account as any,
+        account: client.account || { address: account, type: "json-rpc" },
       });
       await fetchJobs();
     } catch (err: any) {
@@ -359,53 +360,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* HOW IT WORKS WORKFLOW - SLEEK STEPPER */}
-                <div className="mb-14">
-                  <h2 className="text-lg font-semibold text-white mb-6">How It Works</h2>
-                  <div className="glass-panel rounded-xl p-8">
-                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between relative gap-8 md:gap-0">
-                      
-                      {/* Connecting Line */}
-                      <div className="hidden md:block absolute top-4 left-[10%] right-[10%] h-[1px] bg-white/10 z-0"></div>
 
-                      {/* Steps */}
-                      <div className="relative z-10 flex flex-col items-center gap-3 w-full md:w-1/4 text-center">
-                        <div className="w-8 h-8 rounded-full bg-black border border-white/20 flex items-center justify-center text-xs text-gray-400 font-mono shadow-[0_0_15px_rgba(255,255,255,0.05)]">1</div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-white mb-1">Create</h4>
-                          <p className="text-[11px] text-gray-500 max-w-[160px] mx-auto">Client funds escrow & provides Notion/Figma Brief URL.</p>
-                        </div>
-                      </div>
-
-                      <div className="relative z-10 flex flex-col items-center gap-3 w-full md:w-1/4 text-center">
-                        <div className="w-8 h-8 rounded-full bg-black border border-white/20 flex items-center justify-center text-xs text-gray-400 font-mono shadow-[0_0_15px_rgba(255,255,255,0.05)]">2</div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-white mb-1">Build</h4>
-                          <p className="text-[11px] text-gray-500 max-w-[160px] mx-auto">Freelancer accepts and submits final GitHub/Figma URL.</p>
-                        </div>
-                      </div>
-
-                      <div className="relative z-10 flex flex-col items-center gap-3 w-full md:w-1/4 text-center">
-                        <div className="w-8 h-8 rounded-full bg-black border border-primary/40 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(177,85,255,0.15)]">
-                          <Brain size={14} />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-white mb-1">AI Evaluates</h4>
-                          <p className="text-[11px] text-gray-500 max-w-[160px] mx-auto">GenLayer LLM reads both URLs & evaluates quality.</p>
-                        </div>
-                      </div>
-
-                      <div className="relative z-10 flex flex-col items-center gap-3 w-full md:w-1/4 text-center">
-                        <div className="w-8 h-8 rounded-full bg-black border border-white/20 flex items-center justify-center text-xs text-gray-400 font-mono shadow-[0_0_15px_rgba(255,255,255,0.05)]">4</div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-white mb-1">Release</h4>
-                          <p className="text-[11px] text-gray-500 max-w-[160px] mx-auto">Funds released, partially refunded, or fully refunded.</p>
-                        </div>
-                      </div>
-
-                    </div>
-                  </div>
-                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Create Job Form */}
@@ -487,6 +442,51 @@ export default function App() {
                     )}
                   </div>
                 </div>
+
+                {/* Workflow Stepper - Moved below the form */}
+                <div className="mt-8 pt-8 border-t border-[#222]">
+                  <h2 className="text-sm font-semibold text-gray-300 mb-8 font-mono tracking-wider uppercase text-center flex items-center justify-center gap-2">
+                    <Brain size={16} className="text-[#a855f7]" /> GenLayer Intelligent Workflow
+                  </h2>
+                  <div className="flex flex-col md:flex-row items-start justify-between relative max-w-4xl mx-auto">
+                    <div className="hidden md:block absolute left-0 top-4 w-full h-px bg-gradient-to-r from-[#222] via-[#444] to-[#222] z-0"></div>
+                    
+                    <div className="relative z-10 flex flex-col items-center gap-3 w-full md:w-1/4 text-center mb-6 md:mb-0 bg-[#0a0a0a]">
+                      <div className="w-8 h-8 rounded-full bg-black border border-white/20 flex items-center justify-center text-xs text-gray-400 font-mono shadow-[0_0_15px_rgba(255,255,255,0.05)]">1</div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-white mb-1">Create</h4>
+                        <p className="text-[11px] text-gray-500 max-w-[160px] mx-auto">Client locks bounty in smart contract with brief URL.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="relative z-10 flex flex-col items-center gap-3 w-full md:w-1/4 text-center mb-6 md:mb-0 bg-[#0a0a0a]">
+                      <div className="w-8 h-8 rounded-full bg-black border border-white/20 flex items-center justify-center text-xs text-gray-400 font-mono shadow-[0_0_15px_rgba(255,255,255,0.05)]">2</div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-white mb-1">Build</h4>
+                        <p className="text-[11px] text-gray-500 max-w-[160px] mx-auto">Freelancer accepts and submits final GitHub/Figma URL.</p>
+                      </div>
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-center gap-3 w-full md:w-1/4 text-center mb-6 md:mb-0 bg-[#0a0a0a]">
+                      <div className="w-8 h-8 rounded-full bg-black border border-primary/40 flex items-center justify-center text-primary shadow-[0_0_20px_rgba(177,85,255,0.15)]">
+                        <Brain size={14} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-white mb-1">AI Evaluates</h4>
+                        <p className="text-[11px] text-gray-500 max-w-[160px] mx-auto">GenLayer LLM reads both URLs & evaluates quality.</p>
+                      </div>
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-center gap-3 w-full md:w-1/4 text-center bg-[#0a0a0a]">
+                      <div className="w-8 h-8 rounded-full bg-black border border-white/20 flex items-center justify-center text-xs text-gray-400 font-mono shadow-[0_0_15px_rgba(255,255,255,0.05)]">4</div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-white mb-1">Release</h4>
+                        <p className="text-[11px] text-gray-500 max-w-[160px] mx-auto">Funds released, partially refunded, or fully refunded.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             )}
 
