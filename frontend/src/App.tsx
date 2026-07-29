@@ -124,6 +124,7 @@ export default function App() {
       });
     } catch (err) {
       console.error("Fetch jobs error:", err);
+      setJobs(prev => prev.map(j => j.status === 'EVALUATING' ? { ...j, status: 'IN_PROGRESS' } : j));
     }
   };
 
@@ -246,8 +247,13 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
+      // Set evaluating state optimistically
       setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'EVALUATING' } : j));
-      setTimeout(fetchJobs, 4000);
+      
+      // Fetch aggressively to get the result
+      setTimeout(fetchJobs, 2000);
+      setTimeout(fetchJobs, 6000);
+      setTimeout(fetchJobs, 12000);
     } catch (err: any) {
       setErrorMsg(`Failed to run AI Validator: ${err.message || err.toString()}`);
       clearError();
