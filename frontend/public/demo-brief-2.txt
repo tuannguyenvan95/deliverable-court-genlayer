@@ -1,0 +1,1 @@
+Brief: Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all sections are pixel-perfect.

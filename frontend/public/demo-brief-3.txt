@@ -1,0 +1,1 @@
+Brief: Integrate the new Web3 hooks into the existing React dashboard. Ensure wallet connection works smoothly with WalletConnect and MetaMask.
