@@ -73,15 +73,23 @@ export default function App() {
   };
 
   const fillDemoCreateJob = () => {
-    setTitle("High-converting Web3 Landing Page");
-    setDesc("Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all 4 sections are pixel-perfect.");
-    setBriefUrl("https://www.notion.so/Web3-Landing-Page-Brief");
-    setAmount("5000000000000000000");
+    const demos = [
+      { t: "High-converting Web3 Landing Page", d: "Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all 4 sections are pixel-perfect.", b: "https://www.notion.so/Web3-Landing-Page-Brief", a: "5000000000000000000" },
+      { t: "Smart Contract Audit & Fixes", d: "Audit the attached ERC20 token contract. Fix any reentrancy vulnerabilities and optimize gas usage for the mint function.", b: "https://github.com/demo/erc20-audit-brief", a: "12000000000000000000" },
+      { t: "DeFi Dashboard UI Integration", d: "Integrate the new Web3 hooks into the existing React dashboard. Ensure wallet connection works with WalletConnect and MetaMask.", b: "https://www.figma.com/file/demo-defi-dashboard", a: "8000000000000000000" }
+    ];
+    const r = demos[Math.floor(Math.random() * demos.length)];
+    setTitle(r.t); setDesc(r.d); setBriefUrl(r.b); setAmount(r.a);
   };
 
   const fillDemoSubmit = () => {
-    setDeliverableUrl("https://github.com/demo/web3-landing-page");
-    setNotes("Completed all 4 sections exactly as in the Figma. Fully responsive on mobile. Deployed link is in the README.");
+    const demos = [
+      { u: "https://github.com/demo/web3-landing-page", n: "Completed all 4 sections exactly as in the Figma. Fully responsive on mobile. Deployed link is in the README." },
+      { u: "https://github.com/demo/fixed-erc20-contract", n: "Found 2 reentrancy vectors and fixed them. Gas usage reduced by 15%. Tests are passing." },
+      { u: "https://github.com/demo/defi-dashboard-integration", n: "Integrated all Web3 hooks. Wallet connection is smooth. Tested with MetaMask and TrustWallet." }
+    ];
+    const r = demos[Math.floor(Math.random() * demos.length)];
+    setDeliverableUrl(r.u); setNotes(r.n);
   };
 
   const fetchJobs = async () => {
@@ -582,7 +590,7 @@ export default function App() {
                           </div>
 
                           {/* AI VERDICT DISPLAY */}
-                          {job.status === 'CLOSED' && job.ai_verdict && (
+                          {job.ai_verdict && (
                             <div className={`p-4 rounded-lg border bg-black/40 ${
                               job.ai_verdict === 'RELEASE' ? 'border-green-500/20 text-green-100' : 
                               job.ai_verdict === 'REFUND' ? 'border-red-500/20 text-red-100' : 
