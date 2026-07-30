@@ -39,6 +39,7 @@ export default function App() {
 
   // Active Tab
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [evaluatingJobId, setEvaluatingJobId] = useState<string | null>(null);
 
   useEffect(() => {
     // Initialize default client for reading
@@ -164,30 +165,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [account, CONTRACT_ADDRESS, client]);
 
-  // Demo Fallback Check: Independent interval so that even if RPC is 100% rate-limited, the UX proceeds!
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setJobs(prev => {
-        let changed = false;
-        const newJobs = prev.map(job => {
-          if (job.status === 'EVALUATING' && job.eval_start && !job.ai_verdict) {
-            if (Date.now() - job.eval_start > 15000) {
-              changed = true;
-              return {
-                ...job,
-                status: 'CLOSED',
-                ai_verdict: 'RELEASE',
-                ai_reason: 'The GenLayer AI has verified that the deliverable strictly matches the brief requirements. All checks passed successfully.'
-              };
-            }
-          }
-          return job;
-        });
-        return changed ? newJobs : prev;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const clearError = () => {
     setTimeout(() => setErrorMsg(null), 7000);
@@ -208,26 +185,10 @@ export default function App() {
         value: parseGenToWei(amount),
         account: client.account || { address: account, type: "json-rpc" },
       });
-      const optimisticJob = {
-        id: "PENDING-" + Date.now(),
-        client: account,
-        freelancer: "0x0000000000000000000000000000000000000000",
-        title: title,
-        description: desc,
-        brief_url: briefUrl,
-        deliverable_url: "",
-        amount: parseGenToWei(amount).toString(),
-        status: "OPEN",
-        freelancer_notes: "",
-        ai_verdict: "",
-        ai_reason: "",
-        created_at: Math.floor(Date.now() / 1000)
-      };
-      setJobs(prev => [optimisticJob, ...prev]);
       
       setTitle(''); setDesc(''); setBriefUrl(''); setAmount('');
       setActiveTab('jobs');
-      setTimeout(fetchJobs, 2000);
+      await fetchJobs();
     } catch (err: any) {
       console.error(err);
       setErrorMsg(`Failed to create job: ${err.message || err.toString()}`);
@@ -248,8 +209,7 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'IN_PROGRESS', freelancer: account } : j));
-      setTimeout(fetchJobs, 2000);
+      await fetchJobs();
     } catch (err: any) {
       setErrorMsg(`Failed to accept job: ${err.message || err.toString()}`);
       clearError();
@@ -274,13 +234,12 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, deliverable_url: finalUrl, freelancer_notes: finalNotes } : j));
       setActiveJobId(null);
       setDeliverableUrl('');
       setDemoUrl('');
       setNotes('');
       setActiveTab('jobs');
-      setTimeout(fetchJobs, 2000);
+      await fetchJobs();
     } catch (err: any) {
       setErrorMsg(`Failed to submit work: ${err.message || err.toString()}`);
       clearError();
@@ -290,7 +249,7 @@ export default function App() {
 
   const adjudicate = async (jobId: string) => {
     if (!account) return setErrorMsg('Connect wallet first');
-    setLoading(true);
+    setEvaluatingJobId(jobId);
     setErrorMsg(null);
     try {
       await client.writeContract({
@@ -300,22 +259,13 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      // Set evaluating state optimistically with a timestamp
-      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'EVALUATING', eval_start: Date.now() } : j));
-      
-      // Fetch aggressively to get the result
-      setTimeout(fetchJobs, 5000);
-      setTimeout(fetchJobs, 15000);
-      setTimeout(fetchJobs, 25000);
+      await fetchJobs();
     } catch (err: any) {
-      console.warn("RPC Error ignored for demo fallback:", err);
-      // Force UI into evaluating state to trigger the optimistic fallback
-      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'EVALUATING', eval_start: Date.now() } : j));
-      setTimeout(fetchJobs, 5000);
-      setTimeout(fetchJobs, 15000);
-      setTimeout(fetchJobs, 25000);
+      console.error(err);
+      setErrorMsg(`Failed to evaluate: ${err.message || err.toString()}`);
+      clearError();
     }
-    setLoading(false);
+    setEvaluatingJobId(null);
   };
 
   const totalJobs = jobs.length;
@@ -629,12 +579,12 @@ export default function App() {
                             <div className="flex items-center justify-between mb-3">
                               <h3 className="text-lg font-semibold text-white">{job.title}</h3>
                               <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wider uppercase ${
+                                evaluatingJobId === job.id ? 'bg-purple-500/10 text-purple-400 animate-pulse' :
                                 job.status === 'OPEN' ? 'bg-green-500/10 text-green-400' : 
                                 job.status === 'IN_PROGRESS' ? 'bg-yellow-500/10 text-yellow-500' : 
-                                job.status === 'EVALUATING' ? 'bg-purple-500/10 text-purple-400 animate-pulse' :
                                 'bg-white/5 text-gray-400'
                               }`}>
-                                {job.status}
+                                {evaluatingJobId === job.id ? 'EVALUATING' : job.status}
                               </span>
                             </div>
 
@@ -712,13 +662,13 @@ export default function App() {
                             </button>
                           )}
                           
-                          {job.status === 'IN_PROGRESS' && job.deliverable_url && (
-                            <button onClick={() => adjudicate(job.id)} disabled={loading} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+                          {job.status === 'IN_PROGRESS' && job.deliverable_url && evaluatingJobId !== job.id && (
+                            <button onClick={() => adjudicate(job.id)} disabled={evaluatingJobId !== null} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
                               <Brain size={14} /> Evaluate
                             </button>
                           )}
 
-                          {job.status === 'EVALUATING' && (
+                          {evaluatingJobId === job.id && (
                             <div className="w-full border border-primary/20 bg-primary/5 text-primary py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
                               <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                               AI Running...
