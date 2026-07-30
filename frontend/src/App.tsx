@@ -135,20 +135,9 @@ export default function App() {
         const pending = prev.filter(j => j.id.startsWith("PENDING-") && (Date.now() - parseInt(j.id.split('-')[1])) < 15000);
         return [...pending, ...jobsArray.reverse()].map(newJob => {
           const oldJob = prev.find(p => p.id === newJob.id);
-          // If UI is EVALUATING but backend hasn't processed it yet
-          if (oldJob && oldJob.status === 'EVALUATING' && !newJob.ai_verdict && oldJob.eval_start) {
-            const elapsed = Date.now() - oldJob.eval_start;
-            if (elapsed < 18000) {
-              return { ...newJob, status: 'EVALUATING', eval_start: oldJob.eval_start };
-            } else {
-              // Handled by the demo fallback interval now
-              return { ...newJob, status: 'EVALUATING', eval_start: oldJob.eval_start };
-            }
-          }
-          
-          // If we injected a mock CLOSED state for the demo, do not let the flaky blockchain overwrite it with IN_PROGRESS
-          if (oldJob && oldJob.status === 'CLOSED' && oldJob.ai_verdict && !newJob.ai_verdict) {
-              return oldJob;
+          if (oldJob && oldJob.__updatedAt && (Date.now() - oldJob.__updatedAt < 20000)) {
+            // Keep the optimistic state for 20 seconds while the blockchain catches up
+            return { ...newJob, ...oldJob };
           }
           return newJob;
         });
@@ -185,10 +174,26 @@ export default function App() {
         value: parseGenToWei(amount),
         account: client.account || { address: account, type: "json-rpc" },
       });
+      const optimisticJob = {
+        id: "PENDING-" + Date.now(),
+        client: account,
+        freelancer: "0x0000000000000000000000000000000000000000",
+        title: title,
+        description: desc,
+        brief_url: briefUrl,
+        deliverable_url: "",
+        amount: parseGenToWei(amount).toString(),
+        status: "OPEN",
+        freelancer_notes: "",
+        ai_verdict: "",
+        ai_reason: "",
+        created_at: Math.floor(Date.now() / 1000)
+      };
+      setJobs(prev => [optimisticJob, ...prev]);
       
       setTitle(''); setDesc(''); setBriefUrl(''); setAmount('');
       setActiveTab('jobs');
-      await fetchJobs();
+      setTimeout(fetchJobs, 2000);
     } catch (err: any) {
       console.error(err);
       setErrorMsg(`Failed to create job: ${err.message || err.toString()}`);
@@ -209,7 +214,8 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      await fetchJobs();
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'IN_PROGRESS', freelancer: account, __updatedAt: Date.now() } : j));
+      setTimeout(fetchJobs, 2000);
     } catch (err: any) {
       setErrorMsg(`Failed to accept job: ${err.message || err.toString()}`);
       clearError();
@@ -234,12 +240,13 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
+      setJobs(prev => prev.map(j => j.id === activeJobId ? { ...j, deliverable_url: finalUrl, freelancer_notes: finalNotes, __updatedAt: Date.now() } : j));
       setActiveJobId(null);
       setDeliverableUrl('');
       setDemoUrl('');
       setNotes('');
       setActiveTab('jobs');
-      await fetchJobs();
+      setTimeout(fetchJobs, 2000);
     } catch (err: any) {
       setErrorMsg(`Failed to submit work: ${err.message || err.toString()}`);
       clearError();
