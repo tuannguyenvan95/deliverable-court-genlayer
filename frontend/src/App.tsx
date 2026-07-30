@@ -157,7 +157,7 @@ export default function App() {
   useEffect(() => {
     if (evaluatingJobId) {
       const job = jobs.find(j => j.id === evaluatingJobId);
-      if (job && job.status === 'CLOSED') {
+      if (job && (job.status === 'CLOSED' || job.ai_verdict)) {
         setEvaluatingJobId(null);
       }
     }
@@ -266,6 +266,12 @@ export default function App() {
     if (!account) return setErrorMsg('Connect wallet first');
     setEvaluatingJobId(jobId);
     setErrorMsg(null);
+    
+    // Fallback timeout in case transaction drops or AI is too slow
+    const timeout = setTimeout(() => {
+      setEvaluatingJobId(current => current === jobId ? null : current);
+    }, 60000);
+    
     try {
       await client.writeContract({
         address: CONTRACT_ADDRESS as any,
@@ -282,6 +288,7 @@ export default function App() {
       setErrorMsg(`Failed to evaluate: ${err.message || err.toString()}`);
       clearError();
       setEvaluatingJobId(null);
+      clearTimeout(timeout);
     }
   };
 
