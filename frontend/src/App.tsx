@@ -154,6 +154,14 @@ export default function App() {
     return () => clearInterval(interval);
   }, [account, CONTRACT_ADDRESS, client]);
 
+  useEffect(() => {
+    if (evaluatingJobId) {
+      const job = jobs.find(j => j.id === evaluatingJobId);
+      if (job && job.status === 'CLOSED') {
+        setEvaluatingJobId(null);
+      }
+    }
+  }, [jobs, evaluatingJobId]);
 
   const clearError = () => {
     setTimeout(() => setErrorMsg(null), 7000);
@@ -266,13 +274,15 @@ export default function App() {
         value: 0n,
         account: client.account || { address: account, type: "json-rpc" },
       });
-      await fetchJobs();
+      // Do NOT clear evaluatingJobId here. 
+      // The blockchain takes time to run the AI. 
+      // The new useEffect will clear it when the job status becomes CLOSED.
     } catch (err: any) {
       console.error(err);
       setErrorMsg(`Failed to evaluate: ${err.message || err.toString()}`);
       clearError();
+      setEvaluatingJobId(null);
     }
-    setEvaluatingJobId(null);
   };
 
   const totalJobs = jobs.length;
