@@ -277,8 +277,14 @@ export default function App() {
     
     // Fallback timeout in case transaction drops or AI is too slow
     const timeout = setTimeout(() => {
-      setEvaluatingJobId(current => current === jobId ? null : current);
-    }, 60000);
+      setEvaluatingJobId(current => {
+        if (current === jobId) {
+          setErrorMsg("The AI evaluation is taking longer than usual (network busy). Please wait a moment and refresh the page.");
+          return null;
+        }
+        return current;
+      });
+    }, 180000); // 3 minutes timeout
     
     try {
       await client.writeContract({
