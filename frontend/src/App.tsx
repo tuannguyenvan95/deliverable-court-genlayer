@@ -95,7 +95,9 @@ export default function App() {
     const demos = [
       { t: "Smart Contract Audit & Fixes", d: "Audit the attached ERC20 token contract. Fix any reentrancy vulnerabilities and optimize gas usage for the mint function.", b: "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-brief-1.txt", a: "12" },
       { t: "High-converting Web3 Landing Page", d: "Create a sleek landing page matching the Figma design. Must be fully responsive and built with React. Ensure all 4 sections are pixel-perfect.", b: "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-brief-2.txt", a: "5" },
-      { t: "DeFi Dashboard UI Integration", d: "Integrate the new Web3 hooks into the existing React dashboard. Ensure wallet connection works with WalletConnect and MetaMask.", b: "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-brief-3.txt", a: "8" }
+      { t: "DeFi Dashboard UI Integration", d: "Integrate the new Web3 hooks into the existing React dashboard. Ensure wallet connection works with WalletConnect and MetaMask.", b: "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-brief-3.txt", a: "8" },
+      { t: "NFT Staking Smart Contract", d: "Develop a secure NFT staking contract where users earn ERC20 tokens linearly based on time staked. Must include a 'withdraw' and 'claimRewards' function. Code must be heavily commented and pass a security audit (no reentrancy).", b: "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-brief-4.txt", a: "20" },
+      { t: "Mobile App Backend (Node.js)", d: "Build a Node.js Express backend with PostgreSQL for a social media app. Must include user authentication (JWT), post creation, and like functionality. Provide a Postman collection for API testing.", b: "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-brief-5.txt", a: "15" }
     ];
     const r = demos[Math.floor(Math.random() * demos.length)];
     setTitle(r.t); setDesc(r.d); setBriefUrl(r.b); setAmount(r.a);
@@ -113,6 +115,12 @@ export default function App() {
       } else if (activeJob.title === "DeFi Dashboard UI Integration") {
         u = "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-deliverable-3.txt";
         n = "Integrated all Web3 hooks. Wallet connection is smooth. Tested thoroughly with MetaMask and WalletConnect. No errors in console. Meets all requirements.";
+      } else if (activeJob.title === "NFT Staking Smart Contract") {
+        u = "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-deliverable-4.txt";
+        n = "Completed the NFT staking contract with reentrancy guards. Fully commented and Slither shows 0 issues.";
+      } else if (activeJob.title === "Mobile App Backend (Node.js)") {
+        u = "https://raw.githubusercontent.com/tuannguyenvan95/deliverable-court-genlayer/master/frontend/public/demo-deliverable-5.txt";
+        n = "Backend complete. Integrated Prisma and JWT. Postman collection is attached in the deliverable URL. Passing all requirements.";
       }
     }
     setDeliverableUrl(u); setNotes(n); setDemoUrl('');

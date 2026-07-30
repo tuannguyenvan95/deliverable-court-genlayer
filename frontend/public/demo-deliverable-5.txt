@@ -1,0 +1,5 @@
+Freelancer Submission:
+- Developed the Express backend with PostgreSQL (using Prisma ORM).
+- Implemented secure JWT authentication with bcrypt password hashing.
+- Added endpoints for creating posts, fetching feeds, and liking posts.
+- Exported and attached the requested Postman collection containing 12 API test scenarios.

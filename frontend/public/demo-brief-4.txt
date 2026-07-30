@@ -1,0 +1,5 @@
+Client Requirements:
+- Develop a secure NFT staking contract.
+- Users earn ERC20 tokens linearly based on time staked.
+- Must include 'withdraw' and 'claimRewards' functions.
+- Code must be heavily commented and pass a security audit (no reentrancy).

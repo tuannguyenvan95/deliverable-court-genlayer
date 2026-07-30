@@ -1,0 +1,5 @@
+Freelancer Submission:
+- Completed the NFT staking contract as requested.
+- Implemented linear reward calculation using block timestamps.
+- Included 'withdraw' and 'claimRewards' functions with reentrancy guards (using OpenZeppelin's ReentrancyGuard).
+- Fully commented the code and performed a static analysis check (Slither), finding no vulnerabilities.

@@ -1,0 +1,5 @@
+Client Requirements:
+- Build a Node.js Express backend with PostgreSQL for a social media app.
+- Must include user authentication (JWT).
+- Core features: post creation and like functionality.
+- Provide a Postman collection for API testing.
