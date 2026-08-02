@@ -24,6 +24,44 @@ class Contract(gl.Contract):
     def __init__(self):
         self.next_job_id = bigint(0)
     
+    @gl.public.view
+    def get_all_jobs(self) -> str:
+        import json
+        result = {}
+        for job_id, job in self.jobs.items():
+            result[job_id] = {
+                "client": str(job.client),
+                "freelancer": str(job.freelancer),
+                "amount": str(job.amount),
+                "brief_url": job.brief_url,
+                "deliverable_url": job.deliverable_url,
+                "status": job.status,
+                "title": job.title,
+                "description": job.description,
+                "ai_verdict": job.ai_verdict,
+                "ai_reason": job.ai_reason
+            }
+        return json.dumps(result)
+        
+    @gl.public.view
+    def get_job(self, job_id: str) -> str:
+        import json
+        if job_id not in self.jobs:
+            raise UserError("Job does not exist")
+        job = self.jobs[job_id]
+        return json.dumps({
+            "client": str(job.client),
+            "freelancer": str(job.freelancer),
+            "amount": str(job.amount),
+            "brief_url": job.brief_url,
+            "deliverable_url": job.deliverable_url,
+            "status": job.status,
+            "title": job.title,
+            "description": job.description,
+            "ai_verdict": job.ai_verdict,
+            "ai_reason": job.ai_reason
+        })
+    
     @gl.public.write
     def create_job(self, title: str, description: str, brief_url: str) -> str:
         amount = gl.msg.value

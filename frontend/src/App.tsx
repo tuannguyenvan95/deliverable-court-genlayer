@@ -4,7 +4,7 @@ import { studionet } from 'genlayer-js/chains';
 import { Gavel, Wallet, Briefcase, AlertTriangle, LayoutDashboard, Settings, Brain, Shield, Globe, Code2 } from 'lucide-react';
 import './index.css';
 
-const CONTRACT_ADDRESS = "0x41A52a8C1130E0e3f2A6A2e3EF2512c27776aC76";
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0x526C759F9735306714fff9c95EB16B02E0875fEF";
 
 export default function App() {
   const [client, setClient] = useState<any>(null);
