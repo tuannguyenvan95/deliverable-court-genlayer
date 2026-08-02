@@ -3,4 +3,4 @@ git add .
 git commit -m "Stunning UI Overhaul"
 git push
 cd frontend
-npx.cmd vercel deploy --prod --yes --env VITE_CONTRACT_ADDRESS=0xb90894A6E43093aD737231243D2e6121160CbD15
+npx.cmd vercel deploy --prod --yes --env VITE_CONTRACT_ADDRESS=0x160B79DA501ADB54c5362f3293563c0F762Fe952
