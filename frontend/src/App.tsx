@@ -416,9 +416,12 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="glass-panel rounded-xl p-6">
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Smart Contract Address</h3>
-                    <code className="block text-sm text-gray-300 font-mono bg-white/5 border border-white/5 px-4 py-3 rounded-lg break-all">
+                    <code className="block text-sm text-gray-300 font-mono bg-white/5 border border-white/5 px-4 py-3 rounded-lg break-all mb-3">
                       {CONTRACT_ADDRESS}
                     </code>
+                    <a href={`https://explorer-studio.genlayer.com/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer" className="text-xs text-[#00E599] hover:underline inline-flex items-center gap-1 font-medium">
+                      View on GenLayer Studio Explorer ↗
+                    </a>
                   </div>
                   
                   <div className="glass-panel rounded-xl p-6">
