@@ -693,7 +693,9 @@ export default function App() {
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-black/30 rounded-lg p-4 border border-white/5 mb-4">
                             <div className="flex flex-col gap-1">
                               <span className="text-[9px] text-gray-500 uppercase font-semibold">Client</span>
-                              <span className="font-mono text-xs text-gray-300">{job.client.slice(0,6)}...{job.client.slice(-4)}</span>
+                              <a href={`https://explorer-studio.genlayer.com/address/${job.client}`} target="_blank" rel="noreferrer" className="font-mono text-xs text-gray-300 hover:text-[#00E599] hover:underline truncate">
+                                {job.client.slice(0,6)}...{job.client.slice(-4)} ↗
+                              </a>
                             </div>
                             <div className="flex flex-col gap-1">
                               <span className="text-[9px] text-gray-500 uppercase font-semibold">Amount</span>

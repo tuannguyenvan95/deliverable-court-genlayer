@@ -4,7 +4,8 @@ DeliverableCourt is an intelligent escrow dApp that resolves freelancer disputes
 
 ## Deployed Contract
 - Address: `0xb90894A6E43093aD737231243D2e6121160CbD15`
-- Explorer Link: https://explorer-studio.genlayer.com/0xb90894A6E43093aD737231243D2e6121160CbD15
+- Explorer Link: https://explorer-studio.genlayer.com/address/0xb90894A6E43093aD737231243D2e6121160CbD15
+- Studio Contract Link: https://studio.genlayer.com/contracts/0xb90894A6E43093aD737231243D2e6121160CbD15
 
 ## Live App
 - Vercel URL: https://deliverable-court-genlayer.vercel.app
