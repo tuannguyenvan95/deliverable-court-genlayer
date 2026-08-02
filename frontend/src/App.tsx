@@ -19,6 +19,7 @@ export default function App() {
   });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [rpcDown, setRpcDown] = useState(false);
 
   useEffect(() => {
     try {
@@ -175,9 +176,13 @@ export default function App() {
           return newJob;
         });
       });
-    } catch (err) {
+      setRpcDown(false);
+    } catch (err: any) {
       console.error("Fetch jobs error:", err);
-      // Removed premature reset of EVALUATING status to prevent UI flickering on RPC errors
+      const str = err.message || err.toString() || "";
+      if (str.includes("is not valid JSON") || str.includes("Bad gateway") || str.includes("502") || str.includes("503") || str.includes("Unexpected token")) {
+        setRpcDown(true);
+      }
     }
   };
 
@@ -428,6 +433,15 @@ export default function App() {
               </div>
             </div>
           </header>
+
+          {rpcDown && (
+            <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-10 py-3 text-yellow-300 flex items-center gap-3 text-sm">
+              <AlertTriangle size={18} className="shrink-0 text-yellow-400 animate-pulse" />
+              <span>
+                <strong>GenLayer StudioNet Network Notice:</strong> The GenLayer testnet RPC server is currently experiencing downtime or high traffic overload (502 Bad Gateway). Job lists and transactions may fail to load or process until GenLayer servers stabilize.
+              </span>
+            </div>
+          )}
 
           <div className="p-10 max-w-6xl w-full mx-auto flex-1 pb-16">
             
