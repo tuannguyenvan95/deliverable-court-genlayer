@@ -3,8 +3,8 @@
 DeliverableCourt is an intelligent escrow dApp that resolves freelancer disputes by using GenLayer's AI validators to adjudicate submitted deliverables against the original project brief. GenLayer is required because smart contracts traditionally cannot understand or evaluate subjective off-chain data like design files or documents.
 
 ## Deployed Contract
-- Address: `0x526C759F9735306714fff9c95EB16B02E0875fEF`
-- Explorer Link: https://explorer-studio.genlayer.com/0x526C759F9735306714fff9c95EB16B02E0875fEF
+- Address: `0xb90894A6E43093aD737231243D2e6121160CbD15`
+- Explorer Link: https://explorer-studio.genlayer.com/0xb90894A6E43093aD737231243D2e6121160CbD15
 
 ## Live App
 - Vercel URL: https://deliverable-court-genlayer.vercel.app

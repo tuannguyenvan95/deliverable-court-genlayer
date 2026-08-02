@@ -62,9 +62,9 @@ class Contract(gl.Contract):
             "ai_reason": job.ai_reason
         })
     
-    @gl.public.write
+    @gl.public.write.payable
     def create_job(self, title: str, description: str, brief_url: str) -> str:
-        amount = gl.msg.value
+        amount = gl.message.value
         if amount <= bigint(0):
             raise UserError("Job amount must be greater than 0")
             
@@ -72,7 +72,7 @@ class Contract(gl.Contract):
         self.next_job_id += bigint(1)
         
         self.jobs[job_id] = Job(
-            client=gl.msg.sender,
+            client=gl.message.sender_address,
             freelancer=Address("0x0000000000000000000000000000000000000000"),
             amount=amount,
             brief_url=brief_url,
@@ -94,7 +94,7 @@ class Contract(gl.Contract):
         if job.status != "OPEN":
             raise UserError("Job is not open")
             
-        job.freelancer = gl.msg.sender
+        job.freelancer = gl.message.sender_address
         job.status = "IN_PROGRESS"
         self.jobs[job_id] = job
         
@@ -106,7 +106,7 @@ class Contract(gl.Contract):
         job = self.jobs[job_id]
         if job.status != "IN_PROGRESS":
             raise UserError("Job is not in progress")
-        if gl.msg.sender != job.freelancer:
+        if gl.message.sender_address != job.freelancer:
             raise UserError("Only the assigned freelancer can submit deliverable")
             
         job.deliverable_url = deliverable_url + "\nNotes: " + notes
@@ -124,24 +124,89 @@ class Contract(gl.Contract):
         if not job.deliverable_url:
             raise UserError("No deliverable submitted yet")
 
-        # Nondeterministic execution
-        raw_json = gl.vm.run_nondet(
-            lambda: self._adjudicate_leader(job.brief_url, job.deliverable_url),
-            self._adjudicate_validator
-        )
-        
-        import json
+        # Nondeterministic execution without accessing storage inside lambda
+        brief_str = str(job.brief_url)
+        deliv_str = str(job.deliverable_url)
+
+        def leader_fn():
+            try:
+                brief_res = gl.nondet.web.render(brief_str, mode="text")
+                brief_text = brief_res.content if hasattr(brief_res, "content") else str(brief_res)
+            except Exception as e:
+                brief_text = f"404 placeholder or network error: {str(e)}"
+                
+            try:
+                deliv_url_clean = deliv_str.split("\nNotes: ")[0].strip()
+                deliv_res = gl.nondet.web.render(deliv_url_clean, mode="text")
+                deliv_text = deliv_res.content if hasattr(deliv_res, "content") else str(deliv_res)
+            except Exception as e:
+                deliv_text = f"404 placeholder or network error: {str(e)}"
+                
+            prompt = f"""
+            You are an expert project manager and judge.
+            Evaluate the following deliverable against the original brief.
+            
+            BRIEF:
+            {brief_text[:2500]}
+            
+            DELIVERABLE:
+            {deliv_text[:2500]}
+            
+            Decide on one of the following verdicts:
+            - RELEASE: The deliverable fully meets the brief requirements.
+            - PARTIAL: The deliverable partially meets the brief.
+            - REFUND: The deliverable fails to meet the brief, or is unrelated/dummy.
+            - ESCALATE: The evidence is contradictory, or you are unsure.
+            
+            CRITICAL RULE: If either the brief or the deliverable appears to be a 404 error page, example domain placeholder, or mock/dummy testing URL, you MUST output verdict "REFUND" with confidence 100 and reason "Dummy/404 URLs cannot be accepted".
+            
+            You MUST respond with ONLY a JSON object:
+            {{"verdict": "RELEASE|PARTIAL|REFUND|ESCALATE", "confidence": 100, "reason": "your reasoning"}}
+            """
+            
+            res = gl.nondet.exec_prompt(prompt, response_format="json")
+            if isinstance(res, dict):
+                return res
+            if hasattr(res, 'calldata') and isinstance(res.calldata, dict):
+                return res.calldata
+            try:
+                text = res.content if hasattr(res, "content") else str(res)
+                return self._parse_llm_json(text)
+            except Exception:
+                return {"verdict": "REFUND", "confidence": 100, "reason": "Fallback to refund on JSON parse error"}
+
+        def validator_fn(leader_res) -> bool:
+            if not isinstance(leader_res, gl.vm.Return):
+                return False
+            leader_data = leader_res.calldata if hasattr(leader_res, "calldata") else leader_res
+            if not isinstance(leader_data, dict):
+                try:
+                    leader_data = self._parse_llm_json(str(leader_data))
+                except Exception:
+                    leader_data = {"verdict": "REFUND"}
+                    
+            mine_data = leader_fn()
+            v_leader = str(leader_data.get("verdict", "")).upper().strip()
+            v_mine = str(mine_data.get("verdict", "")).upper().strip()
+            return v_leader == v_mine
+
+        result = gl.vm.run_nondet(leader_fn, validator_fn)
+        if not isinstance(result, dict):
+            try:
+                result = self._parse_llm_json(str(result))
+            except Exception:
+                result = {"verdict": "ESCALATE", "confidence": 0, "reason": "Failed to parse AI response."}
+
+        final_verdict = str(result.get("verdict", "ESCALATE")).upper()
         try:
-            data = json.loads(raw_json)
-            final_verdict = data.get("verdict", "ESCALATE")
-            confidence = int(data.get("confidence", 0))
-            reason = data.get("reason", "No reason provided")
-            if confidence < 65:
-                final_verdict = "ESCALATE"
-                reason = "Confidence score below 65. Escalate to human review."
+            confidence = int(result.get("confidence", 0))
         except Exception:
+            confidence = 100
+        reason = str(result.get("reason", "No reason provided"))
+        
+        if confidence < 65:
             final_verdict = "ESCALATE"
-            reason = "Failed to parse AI response."
+            reason = f"[Confidence below threshold: {confidence}%] " + reason
             
         job.ai_verdict = final_verdict
         job.ai_reason = reason
@@ -151,64 +216,32 @@ class Contract(gl.Contract):
         
         if final_verdict == "RELEASE":
             job.status = "CLOSED"
-            gl.get_contract_at(gl.current_contract_address).emit_transfer(job.freelancer, amount)
+            gl.get_contract_at(Address(str(job.freelancer))).emit_transfer(value=amount)
         elif final_verdict == "REFUND":
             job.status = "CLOSED"
-            gl.get_contract_at(gl.current_contract_address).emit_transfer(job.client, amount)
+            gl.get_contract_at(Address(str(job.client))).emit_transfer(value=amount)
         elif final_verdict == "PARTIAL":
             job.status = "CLOSED"
             half = amount // bigint(2)
             rem = amount - half
-            gl.get_contract_at(gl.current_contract_address).emit_transfer(job.client, half)
-            gl.get_contract_at(gl.current_contract_address).emit_transfer(job.freelancer, rem)
+            gl.get_contract_at(Address(str(job.client))).emit_transfer(value=half)
+            gl.get_contract_at(Address(str(job.freelancer))).emit_transfer(value=rem)
         elif final_verdict == "ESCALATE":
             job.amount = amount
             
         self.jobs[job_id] = job
 
-    def _adjudicate_leader(self, brief_url: str, deliverable_url: str) -> str:
+    def _parse_llm_json(self, text) -> dict:
+        if isinstance(text, dict):
+            return text
+        if hasattr(text, '__dict__'):
+            return text.__dict__
         import json
-        
-        brief_res = gl.nondet.web.render(brief_url)
-        if not brief_res.ok:
-            return json.dumps({"verdict": "ESCALATE", "reason": f"Failed to fetch brief URL. It might be invalid, private, or a 404.", "confidence": 100})
-            
-        deliv_res = gl.nondet.web.render(deliverable_url.split("\nNotes: ")[0])
-        if not deliv_res.ok:
-            return json.dumps({"verdict": "ESCALATE", "reason": f"Failed to fetch deliverable URL. It might be invalid, private, or a 404.", "confidence": 100})
-            
-        prompt = f"""
-        You are an expert project manager and judge. 
-        Evaluate the following deliverable against the original brief.
-        
-        BRIEF:
-        {brief_res.content}
-        
-        DELIVERABLE:
-        {deliv_res.content}
-        
-        Decide on one of the following verdicts:
-        - RELEASE: The deliverable fully meets the brief requirements.
-        - PARTIAL: The deliverable partially meets the brief, but is missing some elements.
-        - REFUND: The deliverable completely fails to meet the brief or is irrelevant.
-        - ESCALATE: The evidence is contradictory, or you are unsure.
-        
-        Provide your reasoning and a confidence score (0-100).
-        You MUST output ONLY a valid JSON object in this format:
-        {{"verdict": "RELEASE|PARTIAL|REFUND|ESCALATE", "reason": "your reasoning", "confidence": 100}}
-        """
-        
-        # Calling exec_prompt without schema dictionary to avoid Studio AST parsing bugs
-        result = gl.nondet.exec_prompt(prompt)
-        return result.content
-        
-    def _adjudicate_validator(self, res_leader: str, res_val: str) -> bool:
-        import json
-        try:
-            dict_leader = json.loads(res_leader)
-            dict_val = json.loads(res_val)
-            v_leader = dict_leader.get("verdict", "ESCALATE")
-            v_val = dict_val.get("verdict", "ESCALATE")
-            return v_leader == v_val
-        except Exception:
-            return False
+        text = str(text).strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return json.loads(text.strip())

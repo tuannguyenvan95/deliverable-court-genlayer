@@ -4,7 +4,7 @@ import { studionet } from 'genlayer-js/chains';
 import { Gavel, Wallet, Briefcase, AlertTriangle, LayoutDashboard, Settings, Brain, Shield, Globe, Code2 } from 'lucide-react';
 import './index.css';
 
-const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0x526C759F9735306714fff9c95EB16B02E0875fEF";
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xb90894A6E43093aD737231243D2e6121160CbD15";
 
 export default function App() {
   const [client, setClient] = useState<any>(null);
@@ -140,11 +140,21 @@ export default function App() {
         ...job
       }));
       setJobs(prev => {
-        const pending = prev.filter(j => j.id.startsWith("PENDING-") && (Date.now() - parseInt(j.id.split('-')[1])) < 15000);
-        return [...pending, ...jobsArray.reverse()].map(newJob => {
+        const reversedConfirmed = jobsArray.reverse();
+        const pending = prev.filter(j => {
+          if (!j.id.startsWith("PENDING-")) return false;
+          const timestamp = parseInt(j.id.split('-')[1]) || 0;
+          if (Date.now() - timestamp > 75000) return false; // allow up to 75s for StudioNet consensus
+          // If already confirmed on-chain (matching title and description), replace optimistic item
+          const existsOnChain = reversedConfirmed.some((onChainJob: any) => 
+            onChainJob.title === j.title && onChainJob.description === j.description
+          );
+          return !existsOnChain;
+        });
+        return [...pending, ...reversedConfirmed].map(newJob => {
           const oldJob = prev.find(p => p.id === newJob.id);
-          if (oldJob && oldJob.__updatedAt && (Date.now() - oldJob.__updatedAt < 20000)) {
-            // Keep the optimistic state for 20 seconds while the blockchain catches up
+          if (oldJob && oldJob.__updatedAt && (Date.now() - oldJob.__updatedAt < 75000)) {
+            // Keep the optimistic state for up to 75 seconds while the blockchain state catches up
             return { ...newJob, ...oldJob };
           }
           return newJob;
@@ -261,7 +271,6 @@ export default function App() {
       setDeliverableUrl('');
       setDemoUrl('');
       setNotes('');
-      setActiveTab('jobs');
       setTimeout(fetchJobs, 2000);
     } catch (err: any) {
       setErrorMsg(`Failed to submit work: ${err.message || err.toString()}`);
@@ -530,54 +539,45 @@ export default function App() {
                     </form>
                   </div>
 
-                  {/* Right Column / Submit Deliverable Context */}
+                  {/* Right Column / Intelligent Protocol Reference */}
                   <div className="flex flex-col h-full">
-                    {activeJobId ? (
-                      <div className="glass-panel rounded-xl p-8 border-primary/20 flex-1 flex flex-col">
-                        <div className="flex items-center justify-between mb-2">
-                          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                            Submit Final Deliverable
-                          </h2>
-                          <button onClick={fillDemoSubmit} type="button" className="text-[10px] bg-white/10 hover:bg-white/20 text-gray-300 px-3 py-1.5 rounded uppercase font-bold transition-colors">
-                            Auto-fill Demo Data
-                          </button>
+                    <div className="glass-panel rounded-xl p-8 border-white/10 flex-1 flex flex-col justify-between relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+                      <div>
+                        <div className="flex items-center gap-2 mb-4 text-primary">
+                          <Brain size={22} className="animate-pulse" />
+                          <h2 className="text-lg font-semibold text-white">Intelligent Adjudication Protocol</h2>
                         </div>
-                        <p className="text-xs text-gray-500 mb-6">
-                          Targeting Job ID: <span className="font-mono text-gray-300 ml-1">{activeJobId}</span>
+                        <p className="text-xs text-gray-400 leading-relaxed mb-6">
+                          DeliverableCourt redefines escrow contracts by utilizing GenLayer's non-deterministic AI execution. Traditional smart contracts fail on subjective deliverables like design mockups or codebases; our intelligent validators bridge this gap autonomously.
                         </p>
-                        
-                        <form onSubmit={submitDeliverable} className="space-y-4 flex-1 flex flex-col">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-medium text-gray-400">Main Repository / Source (URL)</label>
-                              <input required type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={deliverableUrl} onChange={e => setDeliverableUrl(e.target.value)} placeholder="https://github.com/..." />
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-medium text-gray-400">Live Demo (Optional URL)</label>
-                              <input type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={demoUrl} onChange={e => setDemoUrl(e.target.value)} placeholder="https://demo.vercel.app/..." />
+                        <div className="space-y-4 mb-6">
+                          <div className="p-3.5 rounded-lg bg-white/[0.02] border border-white/5 flex items-start gap-3">
+                            <Shield size={16} className="text-emerald-400 mt-0.5 shrink-0" />
+                            <div>
+                              <h4 className="text-xs font-semibold text-white">Decentralized AI Consensus</h4>
+                              <p className="text-[11px] text-gray-500 mt-0.5">Multiple independent GenVM validators inspect public URLs and score deliverables against the initial scope.</p>
                             </div>
                           </div>
-                          <div className="space-y-1.5 flex-1 flex flex-col">
-                            <label className="text-xs font-medium text-gray-400">Testing Instructions & Pitch for AI Evaluator</label>
-                            <textarea className="w-full flex-1 bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors min-h-[120px]" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Explain how your work meets the original brief, where to click, how to test..."></textarea>
+                          <div className="p-3.5 rounded-lg bg-white/[0.02] border border-white/5 flex items-start gap-3">
+                            <Gavel size={16} className="text-purple-400 mt-0.5 shrink-0" />
+                            <div>
+                              <h4 className="text-xs font-semibold text-white">Automated Dispute Resolution</h4>
+                              <p className="text-[11px] text-gray-500 mt-0.5">Funds are released automatically based on fair, reasoned AI verdicts without requiring expensive human arbiters.</p>
+                            </div>
                           </div>
-                          <div className="flex gap-3 pt-2">
-                            <button type="submit" disabled={loading} className="flex-2 bg-white text-black px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors flex-grow">
-                              Submit Project
-                            </button>
-                            <button type="button" onClick={() => setActiveJobId(null)} className="flex-1 bg-transparent border border-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-white/5 transition-colors">
-                              Cancel
-                            </button>
-                          </div>
-                        </form>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="glass-panel rounded-xl flex flex-col items-center justify-center flex-1 border-dashed border-white/10 text-gray-500 text-center px-8 min-h-[300px]">
-                        <Brain size={24} className="text-gray-600 mb-4" />
-                        <h3 className="text-sm font-medium text-gray-400 mb-1">Awaiting Context</h3>
-                        <p className="text-xs max-w-xs leading-relaxed">Select an In-Progress job from the Escrows tab to submit your deliverable for evaluation.</p>
+                      <div className="pt-4 border-t border-white/5 flex items-center justify-between text-xs text-gray-400">
+                        <span className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                          StudioNet Live Validators
+                        </span>
+                        <button onClick={() => setActiveTab('jobs')} type="button" className="text-primary hover:underline font-medium">
+                          View Active Escrows &rarr;
+                        </button>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
 
@@ -691,35 +691,44 @@ export default function App() {
 
                         {/* Action Panel */}
                         <div className="w-full lg:w-48 lg:border-l border-white/5 lg:pl-6 flex flex-col justify-center gap-3">
-                          {job.status === 'OPEN' && (
-                            <button onClick={() => acceptJob(job.id)} disabled={loading || !account} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
-                              Accept Job
-                            </button>
-                          )}
-                          
-                          {job.status === 'IN_PROGRESS' && !job.deliverable_url && (
-                            <button onClick={() => { setActiveJobId(job.id); setActiveTab('dashboard'); }} disabled={loading} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-sm font-semibold transition-colors">
-                              Submit Work
-                            </button>
-                          )}
-                          
-                          {job.status === 'IN_PROGRESS' && job.deliverable_url && evaluatingJobId !== job.id && (
-                            <button onClick={() => adjudicate(job.id)} disabled={evaluatingJobId !== null} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
-                              <Brain size={14} /> Evaluate
-                            </button>
-                          )}
-
-                          {evaluatingJobId === job.id && (
-                            <div className="w-full border border-primary/20 bg-primary/5 text-primary py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
-                              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                              AI Running...
+                          {job.id.startsWith('PENDING-') ? (
+                            <div className="w-full border border-yellow-500/20 bg-yellow-500/5 text-yellow-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-2">
+                              <div className="w-3.5 h-3.5 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                              Confirming on StudioNet...
                             </div>
-                          )}
+                          ) : (
+                            <>
+                              {job.status === 'OPEN' && (
+                                <button onClick={() => acceptJob(job.id)} disabled={loading || !account} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                                  Accept Job
+                                </button>
+                              )}
+                              
+                              {job.status === 'IN_PROGRESS' && !job.deliverable_url && (
+                                <button onClick={() => setActiveJobId(job.id)} disabled={loading} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                                  Submit Work
+                                </button>
+                              )}
+                              
+                              {job.status === 'IN_PROGRESS' && job.deliverable_url && evaluatingJobId !== job.id && (
+                                <button onClick={() => adjudicate(job.id)} disabled={evaluatingJobId !== null} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+                                  <Brain size={14} /> Evaluate
+                                </button>
+                              )}
 
-                          {job.status === 'CLOSED' && (
-                            <div className="w-full border border-dashed border-white/10 text-gray-500 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5">
-                              <Shield size={14} /> Resolved
-                            </div>
+                              {evaluatingJobId === job.id && (
+                                <div className="w-full border border-primary/20 bg-primary/5 text-primary py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+                                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                  AI Running...
+                                </div>
+                              )}
+
+                              {job.status === 'CLOSED' && (
+                                <div className="w-full border border-dashed border-white/10 text-gray-500 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5">
+                                  <Shield size={14} /> Resolved
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -777,6 +786,50 @@ export default function App() {
           </footer>
         </div>
       </div>
+
+      {/* Submit Deliverable Floating Modal */}
+      {activeJobId !== null && !loading && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="glass-panel rounded-xl p-8 border-primary/40 max-w-xl w-full flex flex-col shadow-2xl relative">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                Submit Final Deliverable
+              </h2>
+              <button onClick={fillDemoSubmit} type="button" className="text-[10px] bg-white/10 hover:bg-white/20 text-gray-300 px-3 py-1.5 rounded uppercase font-bold transition-colors">
+                Auto-fill Demo Data
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-6">
+              Targeting Job ID: <span className="font-mono text-primary font-bold ml-1">{activeJobId}</span>
+            </p>
+            
+            <form onSubmit={submitDeliverable} className="space-y-4 flex flex-col">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-400">Main Repository / Source (URL)</label>
+                  <input required type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={deliverableUrl} onChange={e => setDeliverableUrl(e.target.value)} placeholder="https://github.com/..." />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-400">Live Demo (Optional URL)</label>
+                  <input type="url" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={demoUrl} onChange={e => setDemoUrl(e.target.value)} placeholder="https://demo.vercel.app/..." />
+                </div>
+              </div>
+              <div className="space-y-1.5 flex flex-col">
+                <label className="text-xs font-medium text-gray-400">Testing Instructions & Pitch for AI Evaluator</label>
+                <textarea className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors min-h-[120px]" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Explain how your work meets the original brief, where to click, how to test..."></textarea>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="submit" disabled={loading} className="flex-2 bg-white text-black px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors flex-grow shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+                  Submit Project & Lock Work
+                </button>
+                <button type="button" onClick={() => setActiveJobId(null)} className="flex-1 bg-transparent border border-white/20 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-white/10 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Loading Overlay */}
       {loading && (
