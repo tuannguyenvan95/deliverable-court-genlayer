@@ -9,9 +9,24 @@ const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xb90894A6E43
 export default function App() {
   const [client, setClient] = useState<any>(null);
   const [account, setAccount] = useState<string | null>(null);
-  const [jobs, setJobs] = useState<any[]>([]);
+  const [jobs, setJobs] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem(`gl_jobs_${CONTRACT_ADDRESS}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      if (jobs.length > 0) {
+        localStorage.setItem(`gl_jobs_${CONTRACT_ADDRESS}`, JSON.stringify(jobs));
+      }
+    } catch {}
+  }, [jobs]);
   
   // Job creation form
   const [title, setTitle] = useState('');
@@ -144,7 +159,7 @@ export default function App() {
         const pending = prev.filter(j => {
           if (!j.id.startsWith("PENDING-")) return false;
           const timestamp = parseInt(j.id.split('-')[1]) || 0;
-          if (Date.now() - timestamp > 75000) return false; // allow up to 75s for StudioNet consensus
+          if (Date.now() - timestamp > 300000) return false; // allow up to 5 minutes for StudioNet consensus
           // If already confirmed on-chain (matching title and description), replace optimistic item
           const existsOnChain = reversedConfirmed.some((onChainJob: any) => 
             onChainJob.title === j.title && onChainJob.description === j.description
@@ -153,8 +168,8 @@ export default function App() {
         });
         return [...pending, ...reversedConfirmed].map(newJob => {
           const oldJob = prev.find(p => p.id === newJob.id);
-          if (oldJob && oldJob.__updatedAt && (Date.now() - oldJob.__updatedAt < 75000)) {
-            // Keep the optimistic state for up to 75 seconds while the blockchain state catches up
+          if (oldJob && oldJob.__updatedAt && (Date.now() - oldJob.__updatedAt < 300000)) {
+            // Keep the optimistic state for up to 5 minutes while the blockchain state catches up
             return { ...newJob, ...oldJob };
           }
           return newJob;
