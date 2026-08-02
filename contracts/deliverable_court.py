@@ -214,7 +214,7 @@ class Contract(gl.Contract):
         job.ai_reason = reason
         
         amount = job.amount
-        job.amount = bigint(0)
+        # Keep job.amount untouched in metadata so UI always displays original contract value after closure
         
         if final_verdict == "RELEASE":
             job.status = "CLOSED"

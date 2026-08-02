@@ -169,9 +169,16 @@ export default function App() {
         });
         return [...pending, ...reversedConfirmed].map(newJob => {
           const oldJob = prev.find(p => p.id === newJob.id);
-          if (oldJob && oldJob.__updatedAt && (Date.now() - oldJob.__updatedAt < 300000)) {
-            // Keep the optimistic state for up to 5 minutes while the blockchain state catches up
-            return { ...newJob, ...oldJob };
+          if (oldJob) {
+            // Fix: If on-chain job closed and set amount to 0, preserve historical escrow value
+            if ((!newJob.amount || newJob.amount === "0") && oldJob.amount && oldJob.amount !== "0") {
+              newJob.amount = oldJob.amount;
+            }
+            // Fix: Only use optimistic state if blockchain hasn't advanced to CLOSED/verdict
+            const chainAdvanced = newJob.status === 'CLOSED' || Boolean(newJob.ai_verdict) || (oldJob.status === 'OPEN' && newJob.status === 'IN_PROGRESS');
+            if (!chainAdvanced && oldJob.__updatedAt && (Date.now() - oldJob.__updatedAt < 300000)) {
+              return { ...newJob, ...oldJob, amount: newJob.amount };
+            }
           }
           return newJob;
         });
