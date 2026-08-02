@@ -93,6 +93,8 @@ class Contract(gl.Contract):
         job = self.jobs[job_id]
         if job.status != "OPEN":
             raise UserError("Job is not open")
+        if gl.message.sender_address == job.client:
+            raise UserError("Client cannot accept their own job")
             
         job.freelancer = gl.message.sender_address
         job.status = "IN_PROGRESS"

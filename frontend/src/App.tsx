@@ -250,6 +250,10 @@ export default function App() {
 
   const acceptJob = async (jobId: string) => {
     if (!account) return setErrorMsg('Connect wallet first');
+    const targetJob = jobs.find(j => j.id === jobId);
+    if (targetJob && targetJob.client && targetJob.client.toLowerCase() === account.toLowerCase()) {
+      return setErrorMsg("You cannot accept an escrow that you created as the client.");
+    }
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -272,6 +276,10 @@ export default function App() {
   const submitDeliverable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!account || !activeJobId) return;
+    const targetJob = jobs.find(j => j.id === activeJobId);
+    if (targetJob && targetJob.freelancer && targetJob.freelancer.toLowerCase() !== account.toLowerCase()) {
+      return setErrorMsg("Only the accepted freelancer can submit work for this escrow.");
+    }
     setLoading(true);
     setErrorMsg(null);
     
@@ -728,19 +736,43 @@ export default function App() {
                           ) : (
                             <>
                               {job.status === 'OPEN' && (
-                                <button onClick={() => acceptJob(job.id)} disabled={loading || !account} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
-                                  Accept Job
-                                </button>
+                                !account ? (
+                                  <button onClick={connectWallet} className="w-full bg-white text-black hover:bg-gray-200 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                                    <Wallet size={15} /> Connect to Accept
+                                  </button>
+                                ) : (account.toLowerCase() === (job.client || '').toLowerCase()) ? (
+                                  <div className="w-full border border-dashed border-white/20 bg-white/5 text-gray-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed" title="You are the client who created this job">
+                                    <Briefcase size={14} /> Waiting for Freelancer
+                                  </div>
+                                ) : (
+                                  <button onClick={() => acceptJob(job.id)} disabled={loading} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                                    Accept Job
+                                  </button>
+                                )
                               )}
                               
                               {job.status === 'IN_PROGRESS' && !job.deliverable_url && (
-                                <button onClick={() => setActiveJobId(job.id)} disabled={loading} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-sm font-semibold transition-colors">
-                                  Submit Work
-                                </button>
+                                !account ? (
+                                  <button onClick={connectWallet} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
+                                    <Wallet size={14} /> Connect to Submit
+                                  </button>
+                                ) : (account.toLowerCase() === (job.freelancer || '').toLowerCase()) ? (
+                                  <button onClick={() => setActiveJobId(job.id)} disabled={loading} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                                    Submit Work
+                                  </button>
+                                ) : (account.toLowerCase() === (job.client || '').toLowerCase()) ? (
+                                  <div className="w-full border border-blue-500/20 bg-blue-500/5 text-blue-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+                                    <Code2 size={14} className="animate-pulse" /> Freelancer Working...
+                                  </div>
+                                ) : (
+                                  <div className="w-full border border-dashed border-white/10 text-gray-500 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+                                    In Progress
+                                  </div>
+                                )
                               )}
                               
                               {job.status === 'IN_PROGRESS' && job.deliverable_url && evaluatingJobId !== job.id && (
-                                <button onClick={() => adjudicate(job.id)} disabled={evaluatingJobId !== null} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+                                <button onClick={() => adjudicate(job.id)} disabled={evaluatingJobId !== null || !account} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
                                   <Brain size={14} /> Evaluate
                                 </button>
                               )}
