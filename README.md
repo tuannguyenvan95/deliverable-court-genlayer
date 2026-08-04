@@ -16,11 +16,12 @@ python -m unittest tests/test_payout_critical_path.py -v
 1. `test_01_brief_fetch_exception_preserves_escrow_no_refund`: Proves network/connection failures during brief rendering lock funds under `ESCALATED` status with zero refunds emitted.
 2. `test_02_brief_404_page_content_preserves_escrow`: Proves intentional HTTP 404 Brief URLs trigger escalation to protect freelancer payouts.
 3. `test_03_valid_brief_but_dummy_deliverable_triggers_refund`: Confirms standard deliverable validation rules operate seamlessly when briefs are accessible.
+4. `test_04_client_tampering_defense_audit`: Exhaustive audit test verifying all 4 security pillars against client brief tampering and escrow preservation.
 
-## Deployed Contract
-- Address: `0x160B79DA501ADB54c5362f3293563c0F762Fe952`
-- Explorer Link: https://explorer-studio.genlayer.com/address/0x160B79DA501ADB54c5362f3293563c0F762Fe952
-- Studio Contract Link: https://studio.genlayer.com/contracts/0x160B79DA501ADB54c5362f3293563c0F762Fe952
+## Deployed Contract (Latest Verified Build)
+- Address: `0xCEea241F4dFd754175466B186E7bc030d2522bF0`
+- Explorer Link: https://explorer-studio.genlayer.com/address/0xCEea241F4dFd754175466B186E7bc030d2522bF0
+- Studio Contract Link: https://studio.genlayer.com/contracts/0xCEea241F4dFd754175466B186E7bc030d2522bF0
 
 ## Live App
 - Vercel URL: https://deliverable-court-genlayer.vercel.app
