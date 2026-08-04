@@ -134,8 +134,12 @@ class Contract(gl.Contract):
             try:
                 brief_res = gl.nondet.web.render(brief_str, mode="text")
                 brief_text = brief_res.content if hasattr(brief_res, "content") else str(brief_res)
+                # Payout-critical security check: If brief URL fetch fails or returns 404/error, preserve and escalate escrow
+                if any(err in brief_text[:400].lower() for err in ["404 not found", "error 404", "not found", "page not found", "fetch failure", "network error"]):
+                    return {"verdict": "ESCALATE", "confidence": 100, "reason": "Brief URL fetch failure or 404; escalating escrow instead of refunding client to protect freelancer payout."}
             except Exception as e:
-                brief_text = f"404 placeholder or network error: {str(e)}"
+                # Immediate escalation on brief-fetch exception to protect freelancer payout against client tampering
+                return {"verdict": "ESCALATE", "confidence": 100, "reason": f"Brief URL fetch failure ({str(e)}); escalating escrow instead of refunding client to protect freelancer payout."}
                 
             try:
                 deliv_url_clean = deliv_str.split("\nNotes: ")[0].strip()
@@ -158,9 +162,11 @@ class Contract(gl.Contract):
             - RELEASE: The deliverable fully meets the brief requirements.
             - PARTIAL: The deliverable partially meets the brief.
             - REFUND: The deliverable fails to meet the brief, or is unrelated/dummy.
-            - ESCALATE: The evidence is contradictory, or you are unsure.
+            - ESCALATE: The evidence is contradictory, or you are unsure, or brief requirements cannot be verified.
             
-            CRITICAL RULE: If either the brief or the deliverable appears to be a 404 error page, example domain placeholder, or mock/dummy testing URL, you MUST output verdict "REFUND" with confidence 100 and reason "Dummy/404 URLs cannot be accepted".
+            CRITICAL RULES:
+            1. If the BRIEF appears to be a 404 error page, fetch failure, or placeholder/unreachable, you MUST output verdict "ESCALATE" with confidence 100 and reason "Brief URL fetch failure; escalating escrow instead of refunding client to protect freelancer payout."
+            2. If the DELIVERABLE appears to be a 404 error page, example domain placeholder, or mock/dummy testing URL (while the brief is valid and accessible), you MUST output verdict "REFUND" with confidence 100 and reason "Dummy/404 deliverable URLs cannot be accepted".
             
             You MUST respond with ONLY a JSON object:
             {{"verdict": "RELEASE|PARTIAL|REFUND|ESCALATE", "confidence": 100, "reason": "your reasoning"}}
@@ -175,7 +181,7 @@ class Contract(gl.Contract):
                 text = res.content if hasattr(res, "content") else str(res)
                 return self._parse_llm_json(text)
             except Exception:
-                return {"verdict": "REFUND", "confidence": 100, "reason": "Fallback to refund on JSON parse error"}
+                return {"verdict": "ESCALATE", "confidence": 100, "reason": "Fallback to escalate on JSON parse error to protect escrow"}
 
         def validator_fn(leader_res) -> bool:
             if not isinstance(leader_res, gl.vm.Return):
@@ -185,7 +191,7 @@ class Contract(gl.Contract):
                 try:
                     leader_data = self._parse_llm_json(str(leader_data))
                 except Exception:
-                    leader_data = {"verdict": "REFUND"}
+                    leader_data = {"verdict": "ESCALATE"}
                     
             mine_data = leader_fn()
             v_leader = str(leader_data.get("verdict", "")).upper().strip()
@@ -229,6 +235,7 @@ class Contract(gl.Contract):
             gl.get_contract_at(Address(str(job.client))).emit_transfer(value=half)
             gl.get_contract_at(Address(str(job.freelancer))).emit_transfer(value=rem)
         elif final_verdict == "ESCALATE":
+            job.status = "ESCALATED"
             job.amount = amount
             
         self.jobs[job_id] = job

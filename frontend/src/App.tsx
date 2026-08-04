@@ -667,6 +667,7 @@ export default function App() {
                                 evaluatingJobId === job.id ? 'bg-purple-500/10 text-purple-400 animate-pulse' :
                                 job.status === 'OPEN' ? 'bg-green-500/10 text-green-400' : 
                                 job.status === 'IN_PROGRESS' ? 'bg-yellow-500/10 text-yellow-500' : 
+                                job.status === 'ESCALATED' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
                                 'bg-white/5 text-gray-400'
                               }`}>
                                 {evaluatingJobId === job.id ? 'EVALUATING' : job.status}
@@ -796,6 +797,12 @@ export default function App() {
                               {job.status === 'CLOSED' && (
                                 <div className="w-full border border-dashed border-white/10 text-gray-500 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5">
                                   <Shield size={14} /> Resolved
+                                </div>
+                              )}
+
+                              {job.status === 'ESCALATED' && (
+                                <div className="w-full border border-dashed border-orange-500/20 bg-orange-500/5 text-orange-400 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 text-center px-2">
+                                  <AlertTriangle size={14} className="shrink-0" /> Escalated (Funds Locked)
                                 </div>
                               )}
                             </>
