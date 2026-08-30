@@ -27,7 +27,7 @@ python -m unittest tests/test_payout_critical_path.py -v
 - Studio Contract Link: https://studio.genlayer.com/contracts/0x33D0C20a95a44c5ce0585F5945F5A48930cC9bAd
 
 ## Live App
-- Vercel URL: https://deliverable-court-genlayer.vercel.app
+- Vercel URL: https://deliverable-court-genlayer-chi.vercel.app
 
 ## Tech Stack
 - React, TypeScript, Vite
