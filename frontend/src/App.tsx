@@ -56,6 +56,11 @@ export default function App() {
   // Active Tab
   const [activeTab, setActiveTab] = useState('dashboard');
   const [evaluatingJobId, setEvaluatingJobId] = useState<string | null>(null);
+  
+  // Dispute resolution states
+  const [resolvingJobId, setResolvingJobId] = useState<string | null>(null);
+  const [settlementType, setSettlementType] = useState<string>('SPLIT');
+  const [settlementExplanation, setSettlementExplanation] = useState<string>('');
 
   useEffect(() => {
     // Initialize default client for reading
@@ -348,6 +353,30 @@ export default function App() {
       setEvaluatingJobId(null);
       clearTimeout(timeout);
     }
+  };
+
+  const resolveEscalated = async (jobId: string) => {
+    if (!account) return setErrorMsg('Connect wallet first');
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await client.writeContract({
+        address: CONTRACT_ADDRESS as any,
+        functionName: 'resolve_escalated_job',
+        args: [jobId, settlementType, settlementExplanation],
+        value: 0n,
+        account: client.account || { address: account, type: "json-rpc" },
+      });
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: `SETTLED_${settlementType === 'SPLIT' ? 'SPLIT' : settlementType === 'CLIENT_CONCEDE' ? 'RELEASED' : 'REFUNDED'}`, __updatedAt: Date.now() } : j));
+      setResolvingJobId(null);
+      setSettlementExplanation('');
+      setTimeout(fetchJobs, 2000);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(`Failed to resolve dispute: ${err.message || err.toString()}`);
+      clearError();
+    }
+    setLoading(false);
   };
 
   const totalJobs = jobs.length;
@@ -706,10 +735,20 @@ export default function App() {
                               <span className="text-[9px] text-gray-500 uppercase font-semibold">Brief</span>
                               <a href={job.brief_url} target="_blank" rel="noreferrer" className="text-xs text-gray-300 hover:text-white hover:underline truncate">Link ↗</a>
                             </div>
-                            {job.deliverable_url && (
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[9px] text-gray-500 uppercase font-semibold">Deliverable</span>
-                                <a href={job.deliverable_url.split('\n')[0]} target="_blank" rel="noreferrer" className="text-xs text-gray-300 hover:text-white hover:underline truncate">Link ↗</a>
+                            {(job.deliverable_urls || job.deliverable_url) && (
+                              <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
+                                <span className="text-[9px] text-gray-500 uppercase font-semibold">Deliverables</span>
+                                <div className="flex flex-wrap gap-2">
+                                  {(job.deliverable_urls || job.deliverable_url || "").split(",").map((url: string, index: number) => {
+                                    const cleanUrl = url.trim().split("\n")[0];
+                                    if (!cleanUrl) return null;
+                                    return (
+                                      <a key={index} href={cleanUrl} target="_blank" rel="noreferrer" className="text-xs text-[#00E599] hover:underline font-mono">
+                                        Link #{index + 1} ↗
+                                      </a>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -794,15 +833,72 @@ export default function App() {
                                 </div>
                               )}
 
-                              {job.status === 'CLOSED' && (
+                              {(job.status === 'CLOSED' || job.status.startsWith('SETTLED_')) && (
                                 <div className="w-full border border-dashed border-white/10 text-gray-500 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5">
-                                  <Shield size={14} /> Resolved
+                                  <Shield size={14} /> {job.status.startsWith('SETTLED_') ? `Resolved: ${job.status.replace('SETTLED_', '')}` : 'Resolved'}
                                 </div>
                               )}
 
                               {job.status === 'ESCALATED' && (
-                                <div className="w-full border border-dashed border-orange-500/20 bg-orange-500/5 text-orange-400 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 text-center px-2">
-                                  <AlertTriangle size={14} className="shrink-0" /> Escalated (Funds Locked)
+                                <div className="flex flex-col gap-2 w-full">
+                                  <div className="w-full border border-dashed border-orange-500/20 bg-orange-500/5 text-orange-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 text-center px-2">
+                                    <AlertTriangle size={12} className="shrink-0" /> Escalated (Funds Locked)
+                                  </div>
+                                  {account && (account.toLowerCase() === (job.client || '').toLowerCase() || account.toLowerCase() === (job.freelancer || '').toLowerCase()) ? (
+                                    resolvingJobId === job.id ? (
+                                      <div className="flex flex-col gap-2 p-3 rounded-lg bg-white/[0.02] border border-white/5 mt-1 text-left w-full">
+                                        <label className="text-[9px] uppercase text-gray-500 font-bold tracking-wider">Settlement Option</label>
+                                        <select 
+                                          className="bg-black text-xs text-white border border-white/10 p-2 rounded focus:outline-none focus:border-white/30"
+                                          value={settlementType}
+                                          onChange={e => setSettlementType(e.target.value)}
+                                        >
+                                          <option value="SPLIT">50/50 Split Escrow</option>
+                                          {account.toLowerCase() === (job.client || '').toLowerCase() && (
+                                            <option value="CLIENT_CONCEDE">Concede (100% to Freelancer)</option>
+                                          )}
+                                          {account.toLowerCase() === (job.freelancer || '').toLowerCase() && (
+                                            <option value="FREELANCER_CONCEDE">Concede (100% to Client)</option>
+                                          )}
+                                        </select>
+                                        
+                                        <label className="text-[9px] uppercase text-gray-500 font-bold tracking-wider mt-1">Settlement Description</label>
+                                        <input 
+                                          type="text" 
+                                          className="bg-black text-xs text-white border border-white/10 p-2 rounded focus:outline-none focus:border-white/30"
+                                          placeholder="e.g. Agreed to split remaining work"
+                                          value={settlementExplanation}
+                                          onChange={e => setSettlementExplanation(e.target.value)}
+                                        />
+                                        
+                                        <div className="flex gap-2 mt-1">
+                                          <button 
+                                            onClick={() => resolveEscalated(job.id)}
+                                            disabled={loading}
+                                            className="flex-1 bg-[#00E599] text-black text-xs font-semibold py-1.5 rounded hover:bg-[#00c580] disabled:bg-[#00E599]/20 disabled:text-gray-500"
+                                          >
+                                            Confirm
+                                          </button>
+                                          <button 
+                                            onClick={() => setResolvingJobId(null)}
+                                            className="flex-1 bg-white/10 text-white text-xs font-semibold py-1.5 rounded hover:bg-white/20"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button 
+                                        onClick={() => {
+                                          setResolvingJobId(job.id);
+                                          setSettlementType('SPLIT');
+                                        }}
+                                        className="w-full bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 text-orange-300 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                                      >
+                                        Resolve Dispute
+                                      </button>
+                                    )
+                                  ) : null}
                                 </div>
                               )}
                             </>

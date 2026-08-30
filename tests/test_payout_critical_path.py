@@ -111,7 +111,7 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
         self.contract.accept_job(self.job_id)
         self.contract.submit_deliverable(
             self.job_id,
-            deliverable_url="https://github.com/freelancer/repo-submission",
+            deliverable_urls="https://github.com/freelancer/repo-submission",
             notes="Completed dashboard UI according to specifications."
         )
 
@@ -168,7 +168,14 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
             return MagicMock(content="404 Error: deliverable repository not found.")
 
         self.gl_instance.nondet.web.render = mock_render_normal
-        self.gl_instance.nondet.exec_prompt = lambda prompt, response_format="json": {"verdict": "REFUND", "confidence": 100, "reason": "Dummy/404 deliverable URLs cannot be accepted"}
+        
+        def mock_exec_prompt(prompt, response_format="json"):
+            import re
+            match = re.search(r'value "([a-f0-9]{16})"', prompt)
+            canary = match.group(1) if match else ""
+            return {"verdict": "REFUND", "confidence": 100, "canary": canary, "reason": "Dummy/404 deliverable URLs cannot be accepted"}
+
+        self.gl_instance.nondet.exec_prompt = mock_exec_prompt
 
         # Act
         self.contract.adjudicate(self.job_id)
@@ -215,6 +222,61 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
         self.assertEqual(job.status, "ESCALATED", "[Pillar 2] PASSED: Status locked to ESCALATED.")
         self.assertEqual(len(self.gl_instance.transfers), 0, "[Pillar 3] PASSED: 0 transfers emitted! 234 GEN locked inside contract.")
         self.assertEqual(int(job.amount), 234, "[Pillar 3] PASSED: 234 GEN untouched in escrow metadata.")
+
+    def test_05_resolve_escalated_job(self):
+        """
+        NEW FEATURE TEST 5: Verify the resolve_escalated_job escape hatch dispute settlement scenarios:
+        1. SPLIT (50/50 mutual split)
+        2. CLIENT_CONCEDE (100% to freelancer)
+        3. FREELANCER_CONCEDE (100% to client)
+        """
+        # Set job status to ESCALATED
+        job_id = self.job_id
+        self.contract.jobs[job_id].status = "ESCALATED"
+        self.contract.jobs[job_id].amount = MockBigInt(500)
+
+        # 1. Non-participant attempts to resolve -> raises UserError
+        self.gl_instance.message.sender_address = MockAddress("0xHacker")
+        with self.assertRaises(MockUserError):
+            self.contract.resolve_escalated_job(job_id, "SPLIT", "Unfair compromise attempt")
+
+        # 2. SPLIT by Client -> splits 50/50
+        self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
+        self.gl_instance.transfers = []
+        self.contract.resolve_escalated_job(job_id, "SPLIT", "Split dispute in half")
+        job = self.contract.jobs[job_id]
+        self.assertEqual(job.status, "SETTLED_SPLIT")
+        self.assertEqual(len(self.gl_instance.transfers), 2)
+        self.assertEqual(self.gl_instance.transfers[0]["to"], "0xClient_1111")
+        self.assertEqual(self.gl_instance.transfers[0]["value"], 250)
+        self.assertEqual(self.gl_instance.transfers[1]["to"], "0xFreelancer_9999")
+        self.assertEqual(self.gl_instance.transfers[1]["value"], 250)
+
+        # Reset state to ESCALATED
+        self.contract.jobs[job_id].status = "ESCALATED"
+
+        # 3. CLIENT_CONCEDE by Client -> 100% to Freelancer
+        self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
+        self.gl_instance.transfers = []
+        self.contract.resolve_escalated_job(job_id, "CLIENT_CONCEDE", "Conceding all funds to freelancer")
+        job = self.contract.jobs[job_id]
+        self.assertEqual(job.status, "SETTLED_RELEASED")
+        self.assertEqual(len(self.gl_instance.transfers), 1)
+        self.assertEqual(self.gl_instance.transfers[0]["to"], "0xFreelancer_9999")
+        self.assertEqual(self.gl_instance.transfers[0]["value"], 500)
+
+        # Reset state to ESCALATED
+        self.contract.jobs[job_id].status = "ESCALATED"
+
+        # 4. FREELANCER_CONCEDE by Freelancer -> 100% to Client
+        self.gl_instance.message.sender_address = MockAddress("0xFreelancer_9999")
+        self.gl_instance.transfers = []
+        self.contract.resolve_escalated_job(job_id, "FREELANCER_CONCEDE", "Refunding 100% to client")
+        job = self.contract.jobs[job_id]
+        self.assertEqual(job.status, "SETTLED_REFUNDED")
+        self.assertEqual(len(self.gl_instance.transfers), 1)
+        self.assertEqual(self.gl_instance.transfers[0]["to"], "0xClient_1111")
+        self.assertEqual(self.gl_instance.transfers[0]["value"], 500)
 
 
 if __name__ == "__main__":
