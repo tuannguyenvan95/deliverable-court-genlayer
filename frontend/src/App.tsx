@@ -4,7 +4,7 @@ import { studionet } from 'genlayer-js/chains';
 import { Gavel, Wallet, Briefcase, AlertTriangle, LayoutDashboard, Settings, Brain, Shield, Globe, Code2 } from 'lucide-react';
 import './index.css';
 
-const CONTRACT_ADDRESS = "0xCEea241F4dFd754175466B186E7bc030d2522bF0"; // Hardcoded to override old Vercel dashboard environment variables
+const CONTRACT_ADDRESS = "0x33D0C20a95a44c5ce0585F5945F5A48930cC9bAd"; // Hardcoded to override old Vercel dashboard environment variables
 
 export default function App() {
   const [client, setClient] = useState<any>(null);
