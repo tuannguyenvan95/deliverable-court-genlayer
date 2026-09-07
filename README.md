@@ -22,9 +22,9 @@ python -m unittest tests/test_payout_critical_path.py -v
 5. `test_05_resolve_escalated_job`: Verifies dispute escape hatch resolutions (SPLIT, concessions, and unauthorized caller rejections).
 
 ## Deployed Contract (Latest Verified Build)
-- Address: `0xbA1114532714BC84Fb1cb5038e00ef2A3649084f`
-- Explorer Link: https://explorer-studio.genlayer.com/address/0xbA1114532714BC84Fb1cb5038e00ef2A3649084f
-- Studio Contract Link: https://studio.genlayer.com/contracts/0xbA1114532714BC84Fb1cb5038e00ef2A3649084f
+- Address: `0x3f221378A6Bb172165B2c06998A54D0390d2dcCC`
+- Explorer Link: https://explorer-studio.genlayer.com/address/0x3f221378A6Bb172165B2c06998A54D0390d2dcCC
+- Studio Contract Link: https://studio.genlayer.com/contracts/0x3f221378A6Bb172165B2c06998A54D0390d2dcCC
 
 ## Live App
 - Vercel URL: https://deliverable-court-genlayer-chi.vercel.app
