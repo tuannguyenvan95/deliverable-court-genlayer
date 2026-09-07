@@ -18,6 +18,7 @@ class Job:
     ai_verdict: str
     ai_reason: str
     attempts: bigint
+    split_approved_by: str
 
 class Contract(gl.Contract):
     jobs: TreeMap[str, Job]
@@ -43,7 +44,8 @@ class Contract(gl.Contract):
                 "description": job.description,
                 "ai_verdict": job.ai_verdict,
                 "ai_reason": job.ai_reason,
-                "attempts": str(job.attempts)
+                "attempts": str(job.attempts),
+                "split_approved_by": job.split_approved_by
             }
         return json.dumps(result)
         
@@ -65,7 +67,8 @@ class Contract(gl.Contract):
             "description": job.description,
             "ai_verdict": job.ai_verdict,
             "ai_reason": job.ai_reason,
-            "attempts": str(job.attempts)
+            "attempts": str(job.attempts),
+            "split_approved_by": job.split_approved_by
         })
     
     @gl.public.write.payable
@@ -93,7 +96,8 @@ class Contract(gl.Contract):
             description=str(description).strip(),
             ai_verdict="",
             ai_reason="",
-            attempts=bigint(0)
+            attempts=bigint(0),
+            split_approved_by=""
         )
         return job_id
         
@@ -339,7 +343,14 @@ class Contract(gl.Contract):
 
     @gl.public.write
     def resolve_escalated_job(self, job_id: str, settlement_type: str, explanation: str = "") -> None:
-        """Escape hatch / Dispute resolution for escalated jobs."""
+        """Escape hatch / Dispute resolution for escalated jobs.
+        
+        SPLIT requires 2-of-2 mutual approval:
+        - First party calls SPLIT -> recorded as pending approval
+        - Second party calls SPLIT -> executes the 50/50 split
+        
+        CONCEDE is a unilateral voluntary action by the conceding party.
+        """
         if job_id not in self.jobs:
             raise UserError("Job does not exist")
         job = self.jobs[job_id]
@@ -357,7 +368,22 @@ class Contract(gl.Contract):
         amount = job.amount
         
         if settle == "SPLIT":
-            # 50/50 mutual split
+            # 🔒 2-of-2 Mutual Approval Pattern
+            # Both parties must independently call SPLIT before funds are released
+            existing_approval = job.split_approved_by.lower().strip()
+            
+            if not existing_approval:
+                # First approval: record who approved and wait for the other party
+                job.split_approved_by = sender
+                job.ai_reason = f"[SPLIT PENDING] {sender[:10]}... approved 50/50 split. Waiting for counterparty approval. Reason: {explanation}"
+                self.jobs[job_id] = job
+                return
+            
+            if existing_approval == sender:
+                # Same party calling again - no double-approve allowed
+                raise UserError("You have already approved the split. Waiting for the other party to approve.")
+            
+            # Second party approved -> execute the 50/50 split
             half = amount // bigint(2)
             rem = amount - half
             if half > bigint(0):
@@ -365,14 +391,14 @@ class Contract(gl.Contract):
             if rem > bigint(0):
                 gl.get_contract_at(Address(str(job.freelancer))).emit_transfer(value=u256(rem))
             job.status = "SETTLED_SPLIT"
-            job.ai_reason = f"[DISPUTE SETTLED 50/50] {explanation}"
+            job.ai_reason = f"[DISPUTE SETTLED 50/50 - MUTUAL AGREEMENT] Both parties approved. {explanation}"
         elif settle == "CLIENT_CONCEDE" and sender == client:
-            # Client concedes and releases 100% to freelancer
+            # Client concedes and releases 100% to freelancer (unilateral voluntary action)
             gl.get_contract_at(Address(str(job.freelancer))).emit_transfer(value=u256(amount))
             job.status = "SETTLED_RELEASED"
             job.ai_reason = f"[CLIENT CONCEDED 100% TO FREELANCER] {explanation}"
         elif settle == "FREELANCER_CONCEDE" and sender == freelancer:
-            # Freelancer concedes and refunds 100% to client
+            # Freelancer concedes and refunds 100% to client (unilateral voluntary action)
             gl.get_contract_at(Address(str(job.client))).emit_transfer(value=u256(amount))
             job.status = "SETTLED_REFUNDED"
             job.ai_reason = f"[FREELANCER CONCEDED 100% TO CLIENT] {explanation}"

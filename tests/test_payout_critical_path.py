@@ -223,39 +223,69 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
         self.assertEqual(len(self.gl_instance.transfers), 0, "[Pillar 3] PASSED: 0 transfers emitted! 234 GEN locked inside contract.")
         self.assertEqual(int(job.amount), 234, "[Pillar 3] PASSED: 234 GEN untouched in escrow metadata.")
 
-    def test_05_resolve_escalated_job(self):
+    def test_05_resolve_escalated_job_mutual_split(self):
         """
-        NEW FEATURE TEST 5: Verify the resolve_escalated_job escape hatch dispute settlement scenarios:
-        1. SPLIT (50/50 mutual split)
-        2. CLIENT_CONCEDE (100% to freelancer)
-        3. FREELANCER_CONCEDE (100% to client)
+        STEWARD-REQUESTED TEST 5: Verify 2-of-2 mutual approval for SPLIT settlement.
+        
+        The steward (Joaquin) requested: "require both to approve the split, 
+        with a test demonstrating the intended behavior."
+        
+        Test scenarios:
+        1. Non-participant is rejected
+        2. First party (client) proposes SPLIT -> status stays ESCALATED, no transfers
+        3. Same party tries to approve again -> raises UserError (no double-approve)
+        4. Second party (freelancer) approves SPLIT -> funds are split 50/50
+        5. CLIENT_CONCEDE and FREELANCER_CONCEDE remain unilateral voluntary actions
         """
-        # Set job status to ESCALATED
         job_id = self.job_id
         self.contract.jobs[job_id].status = "ESCALATED"
         self.contract.jobs[job_id].amount = MockBigInt(500)
+        self.contract.jobs[job_id].split_approved_by = ""
 
         # 1. Non-participant attempts to resolve -> raises UserError
         self.gl_instance.message.sender_address = MockAddress("0xHacker")
         with self.assertRaises(MockUserError):
             self.contract.resolve_escalated_job(job_id, "SPLIT", "Unfair compromise attempt")
 
-        # 2. SPLIT by Client -> splits 50/50
+        # 2. Client proposes SPLIT -> recorded as pending, NO transfers yet
         self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
         self.gl_instance.transfers = []
-        self.contract.resolve_escalated_job(job_id, "SPLIT", "Split dispute in half")
+        self.contract.resolve_escalated_job(job_id, "SPLIT", "I agree to split")
         job = self.contract.jobs[job_id]
-        self.assertEqual(job.status, "SETTLED_SPLIT")
-        self.assertEqual(len(self.gl_instance.transfers), 2)
+        self.assertEqual(job.status, "ESCALATED", "Status must remain ESCALATED after first approval")
+        self.assertEqual(len(self.gl_instance.transfers), 0, "No transfers until both parties approve")
+        self.assertIn("0xclient_1111", job.split_approved_by.lower(), "Client address must be recorded as first approver")
+        self.assertIn("SPLIT PENDING", job.ai_reason, "Reason should indicate pending approval")
+
+        # 3. Same party (client) tries to approve again -> UserError
+        with self.assertRaises(MockUserError):
+            self.contract.resolve_escalated_job(job_id, "SPLIT", "Trying to double-approve")
+
+        # 4. Second party (freelancer) approves SPLIT -> executes 50/50 transfer
+        self.gl_instance.message.sender_address = MockAddress("0xFreelancer_9999")
+        self.gl_instance.transfers = []
+        self.contract.resolve_escalated_job(job_id, "SPLIT", "I also agree to split")
+        job = self.contract.jobs[job_id]
+        self.assertEqual(job.status, "SETTLED_SPLIT", "Status must be SETTLED_SPLIT after both approve")
+        self.assertEqual(len(self.gl_instance.transfers), 2, "Two transfers: one to client, one to freelancer")
         self.assertEqual(self.gl_instance.transfers[0]["to"], "0xClient_1111")
         self.assertEqual(self.gl_instance.transfers[0]["value"], 250)
         self.assertEqual(self.gl_instance.transfers[1]["to"], "0xFreelancer_9999")
         self.assertEqual(self.gl_instance.transfers[1]["value"], 250)
+        self.assertIn("MUTUAL AGREEMENT", job.ai_reason)
 
-        # Reset state to ESCALATED
+    def test_06_resolve_escalated_concessions(self):
+        """
+        TEST 6: Verify CLIENT_CONCEDE and FREELANCER_CONCEDE remain unilateral voluntary actions.
+        """
+        job_id = self.job_id
+        
+        # Reset state to ESCALATED for CLIENT_CONCEDE test
         self.contract.jobs[job_id].status = "ESCALATED"
+        self.contract.jobs[job_id].amount = MockBigInt(500)
+        self.contract.jobs[job_id].split_approved_by = ""
 
-        # 3. CLIENT_CONCEDE by Client -> 100% to Freelancer
+        # CLIENT_CONCEDE by Client -> 100% to Freelancer
         self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
         self.gl_instance.transfers = []
         self.contract.resolve_escalated_job(job_id, "CLIENT_CONCEDE", "Conceding all funds to freelancer")
@@ -265,10 +295,11 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
         self.assertEqual(self.gl_instance.transfers[0]["to"], "0xFreelancer_9999")
         self.assertEqual(self.gl_instance.transfers[0]["value"], 500)
 
-        # Reset state to ESCALATED
+        # Reset state to ESCALATED for FREELANCER_CONCEDE test
         self.contract.jobs[job_id].status = "ESCALATED"
+        self.contract.jobs[job_id].split_approved_by = ""
 
-        # 4. FREELANCER_CONCEDE by Freelancer -> 100% to Client
+        # FREELANCER_CONCEDE by Freelancer -> 100% to Client
         self.gl_instance.message.sender_address = MockAddress("0xFreelancer_9999")
         self.gl_instance.transfers = []
         self.contract.resolve_escalated_job(job_id, "FREELANCER_CONCEDE", "Refunding 100% to client")
