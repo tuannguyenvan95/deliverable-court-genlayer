@@ -19,10 +19,13 @@ class Job:
     ai_reason: str
     attempts: bigint
     split_approved_by: str
+    deadline: bigint
+    created_at: bigint
 
 class Contract(gl.Contract):
     jobs: TreeMap[str, Job]
     next_job_id: bigint
+    reputation: TreeMap[str, bigint]
 
     def __init__(self):
         self.next_job_id = bigint(0)
@@ -45,7 +48,9 @@ class Contract(gl.Contract):
                 "ai_verdict": job.ai_verdict,
                 "ai_reason": job.ai_reason,
                 "attempts": str(job.attempts),
-                "split_approved_by": job.split_approved_by
+                "split_approved_by": job.split_approved_by,
+                "deadline": str(job.deadline),
+                "created_at": str(job.created_at)
             }
         return json.dumps(result)
         
@@ -68,11 +73,13 @@ class Contract(gl.Contract):
             "ai_verdict": job.ai_verdict,
             "ai_reason": job.ai_reason,
             "attempts": str(job.attempts),
-            "split_approved_by": job.split_approved_by
+            "split_approved_by": job.split_approved_by,
+            "deadline": str(job.deadline),
+            "created_at": str(job.created_at)
         })
     
     @gl.public.write.payable
-    def create_job(self, title: str, description: str, brief_url: str) -> str:
+    def create_job(self, title: str, description: str, brief_url: str, deadline_hours: str = "0") -> str:
         amount = gl.message.value
         if amount <= bigint(0):
             raise UserError("Job amount must be greater than 0")
@@ -80,6 +87,19 @@ class Contract(gl.Contract):
         url_clean = str(brief_url).strip()
         if not url_clean.startswith("http://") and not url_clean.startswith("https://"):
             raise UserError("brief_url must be a valid HTTP/HTTPS URL")
+        
+        # Parse deadline (in hours from now, 0 = no deadline)
+        try:
+            dl_hours = int(str(deadline_hours).strip())
+        except Exception:
+            dl_hours = 0
+        if dl_hours < 0:
+            raise UserError("Deadline hours cannot be negative")
+        
+        now_ts = bigint(gl.block.timestamp)
+        deadline_ts = bigint(0)
+        if dl_hours > 0:
+            deadline_ts = now_ts + bigint(dl_hours * 3600)
             
         job_id = str(self.next_job_id)
         self.next_job_id += bigint(1)
@@ -97,8 +117,16 @@ class Contract(gl.Contract):
             ai_verdict="",
             ai_reason="",
             attempts=bigint(0),
-            split_approved_by=""
+            split_approved_by="",
+            deadline=deadline_ts,
+            created_at=now_ts
         )
+        
+        # Initialize reputation for new clients
+        sender_key = str(gl.message.sender_address).lower()
+        if sender_key not in self.reputation:
+            self.reputation[sender_key] = bigint(0)
+        
         return job_id
         
     @gl.public.write
@@ -319,9 +347,12 @@ class Contract(gl.Contract):
         if verdict == "RELEASE":
             job.status = "CLOSED"
             gl.get_contract_at(Address(str(job.freelancer))).emit_transfer(value=u256(amount))
+            self._update_reputation(str(job.freelancer), bigint(1))
+            self._update_reputation(str(job.client), bigint(1))
         elif verdict == "REFUND":
             job.status = "CLOSED"
             gl.get_contract_at(Address(str(job.client))).emit_transfer(value=u256(amount))
+            self._update_reputation(str(job.freelancer), bigint(-1))
         elif verdict == "PARTIAL":
             job.status = "CLOSED"
             half = amount // bigint(2)
@@ -330,6 +361,7 @@ class Contract(gl.Contract):
                 gl.get_contract_at(Address(str(job.client))).emit_transfer(value=u256(half))
             if rem > bigint(0):
                 gl.get_contract_at(Address(str(job.freelancer))).emit_transfer(value=u256(rem))
+            self._update_reputation(str(job.freelancer), bigint(1))
         elif verdict == "RETRY":
             if job.attempts < bigint(3):
                 job.status = "RETRY"
@@ -406,6 +438,65 @@ class Contract(gl.Contract):
             raise UserError("Invalid settlement type or unauthorized concession")
             
         self.jobs[job_id] = job
+
+    @gl.public.write
+    def cancel_job(self, job_id: str) -> None:
+        """Client can cancel an OPEN job (no freelancer assigned yet) and reclaim escrowed funds."""
+        if job_id not in self.jobs:
+            raise UserError("Job does not exist")
+        job = self.jobs[job_id]
+        if job.status != "OPEN":
+            raise UserError("Only OPEN jobs can be cancelled (no freelancer assigned)")
+        if gl.message.sender_address != job.client:
+            raise UserError("Only the client who created this job can cancel it")
+        
+        amount = job.amount
+        job.status = "CANCELLED"
+        job.ai_reason = "[CLIENT CANCELLED] Job cancelled before freelancer accepted."
+        gl.get_contract_at(Address(str(job.client))).emit_transfer(value=u256(amount))
+        self.jobs[job_id] = job
+
+    @gl.public.write
+    def claim_deadline_refund(self, job_id: str) -> None:
+        """Client can claim refund if freelancer missed the deadline without submitting.
+        Only works for jobs with a deadline set and status IN_PROGRESS (not yet submitted)."""
+        if job_id not in self.jobs:
+            raise UserError("Job does not exist")
+        job = self.jobs[job_id]
+        if gl.message.sender_address != job.client:
+            raise UserError("Only the client can claim a deadline refund")
+        if job.status != "IN_PROGRESS":
+            raise UserError("Deadline refund only applies to IN_PROGRESS jobs")
+        if job.deadline <= bigint(0):
+            raise UserError("This job has no deadline set")
+        
+        now_ts = bigint(gl.block.timestamp)
+        if now_ts < job.deadline:
+            raise UserError("Deadline has not passed yet")
+        
+        amount = job.amount
+        job.status = "CLOSED"
+        job.ai_verdict = "DEADLINE_EXPIRED"
+        job.ai_reason = f"[DEADLINE REFUND] Freelancer did not submit before deadline. Funds returned to client."
+        gl.get_contract_at(Address(str(job.client))).emit_transfer(value=u256(amount))
+        self._update_reputation(str(job.freelancer), bigint(-1))
+        self.jobs[job_id] = job
+
+    @gl.public.view
+    def get_reputation(self, address: str) -> str:
+        """Get reputation score for an address."""
+        key = str(address).strip().lower()
+        if key in self.reputation:
+            return json.dumps({"address": address, "score": str(self.reputation[key])})
+        return json.dumps({"address": address, "score": "0"})
+
+    def _update_reputation(self, address: str, delta: bigint) -> None:
+        """Internal: Update reputation score for an address."""
+        key = str(address).strip().lower()
+        if key in self.reputation:
+            self.reputation[key] = self.reputation[key] + delta
+        else:
+            self.reputation[key] = delta
 
     def _parse_llm_json(self, text) -> dict:
         if isinstance(text, dict):

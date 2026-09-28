@@ -59,6 +59,9 @@ class MockGL:
             validator_fn(ret)
             return res
 
+    class block:
+        timestamp = 1700000000
+
     def __init__(self):
         self.transfers = []
 
@@ -96,6 +99,7 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
         self.contract = deliverable_court.Contract()
         self.contract.jobs = {}
         self.contract.next_job_id = MockBigInt(0)
+        self.contract.reputation = {}
 
         # Step 1: Client creates an escrow job
         self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
@@ -308,6 +312,104 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
         self.assertEqual(len(self.gl_instance.transfers), 1)
         self.assertEqual(self.gl_instance.transfers[0]["to"], "0xClient_1111")
         self.assertEqual(self.gl_instance.transfers[0]["value"], 500)
+
+    def test_07_cancel_open_job(self):
+        """
+        TEST 7: Client can cancel OPEN jobs and reclaim escrowed funds.
+        - Only client can cancel
+        - Only OPEN jobs can be cancelled
+        - Freelancer/hacker cannot cancel
+        """
+        # Create a fresh OPEN job
+        self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
+        self.gl_instance.message.value = MockBigInt(200)
+        new_job_id = self.contract.create_job("Cancel Test", "Test cancel flow", "https://example.com/brief.txt")
+        
+        # 1. Hacker cannot cancel
+        self.gl_instance.message.sender_address = MockAddress("0xHacker")
+        with self.assertRaises(MockUserError):
+            self.contract.cancel_job(new_job_id)
+        
+        # 2. Client cancels -> funds returned
+        self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
+        self.gl_instance.transfers = []
+        self.contract.cancel_job(new_job_id)
+        job = self.contract.jobs[new_job_id]
+        self.assertEqual(job.status, "CANCELLED")
+        self.assertEqual(len(self.gl_instance.transfers), 1)
+        self.assertEqual(self.gl_instance.transfers[0]["to"], "0xClient_1111")
+        self.assertEqual(self.gl_instance.transfers[0]["value"], 200)
+        
+        # 3. Cannot cancel already cancelled job
+        with self.assertRaises(MockUserError):
+            self.contract.cancel_job(new_job_id)
+        
+        # 4. Cannot cancel IN_PROGRESS job (original job_id from setUp)
+        self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
+        with self.assertRaises(MockUserError):
+            self.contract.cancel_job(self.job_id)
+
+    def test_08_deadline_refund(self):
+        """
+        TEST 8: Client can claim refund when freelancer misses deadline.
+        - Deadline must be set
+        - Deadline must have passed
+        - Only IN_PROGRESS jobs
+        """
+        # Create a job with 24h deadline
+        self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
+        self.gl_instance.message.value = MockBigInt(300)
+        self.gl_instance.block.timestamp = 1700000000
+        dl_job_id = self.contract.create_job("Deadline Test", "Test deadline", "https://example.com/brief.txt", deadline_hours="24")
+        
+        # Freelancer accepts
+        self.gl_instance.message.sender_address = MockAddress("0xFreelancer_9999")
+        self.contract.accept_job(dl_job_id)
+        
+        # 1. Client tries to claim before deadline -> rejected
+        self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
+        self.gl_instance.block.timestamp = 1700050000  # Only ~14h passed
+        with self.assertRaises(MockUserError):
+            self.contract.claim_deadline_refund(dl_job_id)
+        
+        # 2. Deadline passes, client claims refund
+        self.gl_instance.block.timestamp = 1700100000  # ~28h passed (> 24h deadline)
+        self.gl_instance.transfers = []
+        self.contract.claim_deadline_refund(dl_job_id)
+        job = self.contract.jobs[dl_job_id]
+        self.assertEqual(job.status, "CLOSED")
+        self.assertEqual(job.ai_verdict, "DEADLINE_EXPIRED")
+        self.assertEqual(len(self.gl_instance.transfers), 1)
+        self.assertEqual(self.gl_instance.transfers[0]["to"], "0xClient_1111")
+        self.assertEqual(self.gl_instance.transfers[0]["value"], 300)
+
+    def test_09_reputation_tracking(self):
+        """
+        TEST 9: Verify reputation system tracks scores correctly.
+        """
+        import json as json_mod
+        
+        # Check client reputation was initialized during setUp
+        rep_str = self.contract.get_reputation("0xClient_1111")
+        rep = json_mod.loads(rep_str)
+        self.assertEqual(rep["score"], "0")
+        
+        # Manually update reputation
+        self.contract._update_reputation("0xClient_1111", MockBigInt(3))
+        rep_str = self.contract.get_reputation("0xClient_1111")
+        rep = json_mod.loads(rep_str)
+        self.assertEqual(rep["score"], "3")
+        
+        # Negative reputation
+        self.contract._update_reputation("0xClient_1111", MockBigInt(-1))
+        rep_str = self.contract.get_reputation("0xClient_1111")
+        rep = json_mod.loads(rep_str)
+        self.assertEqual(rep["score"], "2")
+        
+        # Unknown address returns 0
+        rep_str = self.contract.get_reputation("0xUnknown")
+        rep = json_mod.loads(rep_str)
+        self.assertEqual(rep["score"], "0")
 
 
 if __name__ == "__main__":
