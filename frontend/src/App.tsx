@@ -34,6 +34,7 @@ export default function App() {
   const [desc, setDesc] = useState('');
   const [briefUrl, setBriefUrl] = useState('');
   const [amount, setAmount] = useState('');
+  const [deadlineHours, setDeadlineHours] = useState('');
 
   // Submit deliverable form
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export default function App() {
   const [resolvingJobId, setResolvingJobId] = useState<string | null>(null);
   const [settlementType, setSettlementType] = useState<string>('SPLIT');
   const [settlementExplanation, setSettlementExplanation] = useState<string>('');
+  const [userReputation, setUserReputation] = useState<string>('0');
 
   useEffect(() => {
     // Initialize default client for reading
@@ -213,6 +215,28 @@ export default function App() {
     }
   }, [jobs, evaluatingJobId]);
 
+  useEffect(() => {
+    if (!account || !CONTRACT_ADDRESS || !client) return;
+    const fetchReputation = async () => {
+      try {
+        const repStr = await client.readContract({
+          address: CONTRACT_ADDRESS as any,
+          functionName: 'get_reputation',
+          args: [account],
+        });
+        const parsed = typeof repStr === 'string' ? JSON.parse(repStr) : repStr;
+        if (parsed && parsed.score !== undefined) {
+          setUserReputation(String(parsed.score));
+        }
+      } catch (err) {
+        // Silently catch if method not deployed on old contract
+      }
+    };
+    fetchReputation();
+    const repInterval = setInterval(fetchReputation, 10000);
+    return () => clearInterval(repInterval);
+  }, [account, CONTRACT_ADDRESS, client]);
+
   const clearError = () => {
     setTimeout(() => setErrorMsg(null), 7000);
   };
@@ -228,7 +252,7 @@ export default function App() {
       await client.writeContract({
         address: CONTRACT_ADDRESS as any,
         functionName: 'create_job',
-        args: [title, desc, briefUrl],
+        args: [title, desc, briefUrl, deadlineHours || "0"],
         value: parseGenToWei(amount),
         account: client.account || { address: account, type: "json-rpc" },
       });
@@ -249,7 +273,7 @@ export default function App() {
       };
       setJobs(prev => [optimisticJob, ...prev]);
       
-      setTitle(''); setDesc(''); setBriefUrl(''); setAmount('');
+      setTitle(''); setDesc(''); setBriefUrl(''); setAmount(''); setDeadlineHours('');
       setActiveTab('jobs');
       setTimeout(fetchJobs, 2000);
     } catch (err: any) {
@@ -379,6 +403,60 @@ export default function App() {
     setLoading(false);
   };
 
+  const cancelJob = async (jobId: string) => {
+    if (!account) return setErrorMsg('Connect wallet first');
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await client.writeContract({
+        address: CONTRACT_ADDRESS as any,
+        functionName: 'cancel_job',
+        args: [jobId],
+        value: 0n,
+        account: client.account || { address: account, type: "json-rpc" },
+      });
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'CANCELLED', __updatedAt: Date.now() } : j));
+      setTimeout(fetchJobs, 2000);
+    } catch (err: any) {
+      setErrorMsg(`Failed to cancel job: ${err.message || err.toString()}`);
+      clearError();
+    }
+    setLoading(false);
+  };
+
+  const claimDeadlineRefund = async (jobId: string) => {
+    if (!account) return setErrorMsg('Connect wallet first');
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await client.writeContract({
+        address: CONTRACT_ADDRESS as any,
+        functionName: 'claim_deadline_refund',
+        args: [jobId],
+        value: 0n,
+        account: client.account || { address: account, type: "json-rpc" },
+      });
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'CLOSED', ai_verdict: 'DEADLINE_EXPIRED', __updatedAt: Date.now() } : j));
+      setTimeout(fetchJobs, 2000);
+    } catch (err: any) {
+      setErrorMsg(`Failed to claim deadline refund: ${err.message || err.toString()}`);
+      clearError();
+    }
+    setLoading(false);
+  };
+
+  const formatDeadline = (deadlineTs: string) => {
+    const ts = Number(deadlineTs);
+    if (!ts || ts === 0) return null;
+    const deadlineDate = new Date(ts * 1000);
+    const now = Date.now();
+    const diff = deadlineDate.getTime() - now;
+    if (diff <= 0) return { text: 'Expired', expired: true };
+    const hours = Math.floor(diff / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    return { text: `${hours}h ${mins}m remaining`, expired: false };
+  };
+
   const totalJobs = jobs.length;
   const activeJobs = jobs.filter(j => j.status === 'IN_PROGRESS').length;
   const closedJobs = jobs.filter(j => j.status === 'CLOSED').length;
@@ -424,7 +502,10 @@ export default function App() {
                   <Wallet size={14} className="text-gray-300" />
                 </div>
                 <div className="flex flex-col overflow-hidden">
-                  <span className="text-[10px] text-gray-500 font-medium uppercase">Connected</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-500 font-medium uppercase">Connected</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono font-bold" title="On-chain Reputation Score">⭐ {userReputation}</span>
+                  </div>
                   <span className="text-xs font-mono text-gray-200 truncate">{account.slice(0, 6)}...{account.slice(-4)}</span>
                 </div>
               </div>
@@ -605,6 +686,10 @@ export default function App() {
                         <label className="text-xs font-medium text-gray-400">Escrow Amount (GEN)</label>
                         <input required type="number" step="any" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 5" />
                       </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-gray-400">Deadline (hours, optional)</label>
+                        <input type="number" min="0" className="w-full bg-black/50 border border-white/10 text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors" value={deadlineHours} onChange={e => setDeadlineHours(e.target.value)} placeholder="e.g. 72 (0 = no deadline)" />
+                      </div>
                       
                       <button disabled={loading || !account} type="submit" className="w-full mt-4 bg-white text-black py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors disabled:bg-white/20 disabled:text-gray-400">
                         Create & Fund
@@ -697,6 +782,7 @@ export default function App() {
                                 job.status === 'OPEN' ? 'bg-green-500/10 text-green-400' : 
                                 job.status === 'IN_PROGRESS' ? 'bg-yellow-500/10 text-yellow-500' : 
                                 job.status === 'ESCALATED' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
+                                job.status === 'CANCELLED' ? 'bg-red-500/10 text-red-400' :
                                 'bg-white/5 text-gray-400'
                               }`}>
                                 {evaluatingJobId === job.id ? 'EVALUATING' : job.status}
@@ -753,7 +839,25 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* AI VERDICT DISPLAY */}
+                          {/* Deadline & Reputation Info Bar */}
+                          {(job.deadline && job.deadline !== "0") && (() => {
+                            const dl = formatDeadline(job.deadline);
+                            if (!dl) return null;
+                            return (
+                              <div className={`flex items-center justify-between p-3 rounded-lg border ${dl.expired ? 'bg-red-500/5 border-red-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] text-gray-500 uppercase font-semibold">⏰ Deadline</span>
+                                  <span className={`text-xs font-mono font-semibold ${dl.expired ? 'text-red-400' : 'text-blue-400'}`}>{dl.text}</span>
+                                </div>
+                                {dl.expired && job.status === 'IN_PROGRESS' && account && account.toLowerCase() === (job.client || '').toLowerCase() && (
+                                  <button onClick={() => claimDeadlineRefund(job.id)} disabled={loading} className="bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 px-3 py-1.5 rounded text-[10px] font-bold transition-colors">
+                                    Claim Deadline Refund
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
+
                           {job.ai_verdict && (
                             <div className={`p-4 rounded-lg border bg-black/40 ${
                               job.ai_verdict === 'RELEASE' ? 'border-green-500/20 text-green-100' : 
@@ -790,8 +894,13 @@ export default function App() {
                                     <Wallet size={15} /> Connect to Accept
                                   </button>
                                 ) : (account.toLowerCase() === (job.client || '').toLowerCase()) ? (
-                                  <div className="w-full border border-dashed border-white/20 bg-white/5 text-gray-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed" title="You are the client who created this job">
-                                    <Briefcase size={14} /> Waiting for Freelancer
+                                  <div className="flex flex-col gap-2">
+                                    <div className="w-full border border-dashed border-white/20 bg-white/5 text-gray-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed" title="You are the client who created this job">
+                                      <Briefcase size={14} /> Waiting for Freelancer
+                                    </div>
+                                    <button onClick={() => cancelJob(job.id)} disabled={loading} className="w-full bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 py-2 rounded-lg text-xs font-semibold transition-colors">
+                                      Cancel & Reclaim Funds
+                                    </button>
                                   </div>
                                 ) : (
                                   <button onClick={() => acceptJob(job.id)} disabled={loading} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
