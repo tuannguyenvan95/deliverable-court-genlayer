@@ -19,12 +19,16 @@ python -m unittest tests/test_payout_critical_path.py -v
 2. `test_02_brief_404_page_content_preserves_escrow`: Proves intentional HTTP 404 Brief URLs trigger escalation to protect freelancer payouts.
 3. `test_03_valid_brief_but_dummy_deliverable_triggers_refund`: Confirms standard deliverable validation rules operate seamlessly when briefs are accessible.
 4. `test_04_client_tampering_defense_audit`: Exhaustive audit test verifying all 4 security pillars against client brief tampering and escrow preservation.
-5. `test_05_resolve_escalated_job`: Verifies dispute escape hatch resolutions (SPLIT, concessions, and unauthorized caller rejections).
+5. `test_05_resolve_escalated_job_mutual_split`: Verifies 2-of-2 mutual approval requirement for 50/50 SPLIT settlement.
+6. `test_06_resolve_escalated_concessions`: Verifies unilateral client/freelancer concessions.
+7. `test_07_cancel_open_job`: Verifies client cancellation of OPEN jobs with full escrow refund.
+8. `test_08_deadline_refund`: Verifies automated refund when freelancer misses deadline.
+9. `test_09_reputation_tracking`: Verifies on-chain reputation scoring.
 
 ## Deployed Contract (Latest Verified Build)
-- Address: `0x3f221378A6Bb172165B2c06998A54D0390d2dcCC`
-- Explorer Link: https://explorer-studio.genlayer.com/address/0x3f221378A6Bb172165B2c06998A54D0390d2dcCC
-- Studio Contract Link: https://studio.genlayer.com/contracts/0x3f221378A6Bb172165B2c06998A54D0390d2dcCC
+- Address: `0xEA3787c9C87F33e77c0e41F75E629903dcEa1bA3`
+- Explorer Link: https://explorer-studio.genlayer.com/address/0xEA3787c9C87F33e77c0e41F75E629903dcEa1bA3
+- Studio Contract Link: https://studio.genlayer.com/contracts/0xEA3787c9C87F33e77c0e41F75E629903dcEa1bA3
 
 ## Live App
 - Vercel URL: https://deliverable-court-genlayer-chi.vercel.app
