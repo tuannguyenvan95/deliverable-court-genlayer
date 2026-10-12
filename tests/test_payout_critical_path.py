@@ -100,6 +100,9 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
         self.contract.jobs = {}
         self.contract.next_job_id = MockBigInt(0)
         self.contract.reputation = {}
+        self.contract.completed_jobs = {}
+        self.contract.disputes_won = {}
+        self.contract.withdrawable_balances = {}
 
         # Step 1: Client creates an escrow job
         self.gl_instance.message.sender_address = MockAddress("0xClient_1111")
@@ -411,9 +414,197 @@ class TestPayoutCriticalPathRegression(unittest.TestCase):
         rep = json_mod.loads(rep_str)
         self.assertEqual(rep["score"], "0")
 
+    def test_10_appeal_job_validation(self):
+        """
+        TEST 10: Validate appeal_job constraints:
+        - Job must be CLOSED or ESCALATED
+        - Only client or freelancer can appeal
+        - Requires stake >= 10% of escrow
+        - Cannot appeal twice
+        """
+        job_id = self.job_id
+        # In setUp, job is SUBMITTED -> cannot appeal
+        self.gl_instance.message.sender_address = MockAddress("0xFreelancer_9999")
+        self.gl_instance.message.value = MockBigInt(50)
+        with self.assertRaises(MockUserError):
+            self.contract.appeal_job(job_id, "Unfair status")
+
+        # Set job to ESCALATED
+        self.contract.jobs[job_id].status = "ESCALATED"
+
+        # Hacker cannot appeal
+        self.gl_instance.message.sender_address = MockAddress("0xHacker")
+        with self.assertRaises(MockUserError):
+            self.contract.appeal_job(job_id, "Hacker appeal")
+
+        # Insufficient stake (escrow is 500, required is 50, sender sends 20)
+        self.gl_instance.message.sender_address = MockAddress("0xFreelancer_9999")
+        self.gl_instance.message.value = MockBigInt(20)
+        with self.assertRaises(MockUserError):
+            self.contract.appeal_job(job_id, "Insufficient stake appeal")
+
+        # Empty reason
+        self.gl_instance.message.value = MockBigInt(50)
+        with self.assertRaises(MockUserError):
+            self.contract.appeal_job(job_id, "   ")
+
+    def test_11_appeal_job_success_staked(self):
+        """
+        TEST 11: Valid appeal by Freelancer with 10% stake:
+        - Status becomes APPEALED
+        - appeal_by, appeal_stake, appeal_reason recorded
+        """
+        job_id = self.job_id
+        self.contract.jobs[job_id].status = "CLOSED"
+        self.contract.jobs[job_id].ai_verdict = "REFUND"
+        
+        self.gl_instance.message.sender_address = MockAddress("0xFreelancer_9999")
+        self.gl_instance.message.value = MockBigInt(50)
+        self.contract.appeal_job(job_id, "The client brief was fully satisfied, see commit history.")
+        
+        job = self.contract.jobs[job_id]
+        self.assertEqual(job.status, "APPEALED")
+        self.assertEqual(job.appeal_by, "0xfreelancer_9999")
+        self.assertEqual(job.appeal_stake, 50)
+        self.assertEqual(job.appeal_reason, "The client brief was fully satisfied, see commit history.")
+
+        # Cannot appeal again
+        with self.assertRaises(MockUserError):
+            self.contract.appeal_job(job_id, "Second appeal attempt")
+
+    def test_12_adjudicate_appeal_overturn_release(self):
+        """
+        TEST 12: High Tribunal OVERTURN_RELEASE verdict:
+        - Appellant freelancer gets stake returned (50)
+        - Freelancer receives escrow bounty (500)
+        - Freelancer receives +2 reputation and dispute win recorded
+        """
+        import re
+        job_id = self.job_id
+        self.contract.jobs[job_id].status = "APPEALED"
+        self.contract.jobs[job_id].amount = MockBigInt(500)
+        self.contract.jobs[job_id].appeal_by = "0xfreelancer_9999"
+        self.contract.jobs[job_id].appeal_stake = MockBigInt(50)
+        self.contract.jobs[job_id].appeal_reason = "Detailed architectural justification"
+
+        # Mock render and LLM prompt
+        self.gl_instance.nondet.web.render = lambda url, mode="text": MagicMock(content="Verified repo content.")
+        
+        def mock_appeal_prompt(prompt, response_format="json"):
+            canary_match = re.search(r'value "([a-f0-9]{16})"', prompt)
+            canary = canary_match.group(1) if canary_match else "mock_canary"
+            return {
+                "appeal_verdict": "OVERTURN_RELEASE",
+                "confidence": 100,
+                "canary": canary,
+                "reason": "Tribunal finds freelancer deliverable complied with all primary specs."
+            }
+        self.gl_instance.nondet.exec_prompt = mock_appeal_prompt
+
+        self.gl_instance.transfers = []
+        self.contract.adjudicate_appeal(job_id)
+
+        job = self.contract.jobs[job_id]
+        self.assertEqual(job.status, "APPEAL_RESOLVED")
+        self.assertEqual(job.appeal_verdict, "OVERTURN_RELEASE")
+        
+        # Two transfers: stake refunded to appellant (50) + bounty released to freelancer (500)
+        self.assertEqual(len(self.gl_instance.transfers), 2)
+        self.assertEqual(self.gl_instance.transfers[0]["to"], "0xfreelancer_9999")
+        self.assertEqual(self.gl_instance.transfers[0]["value"], 50)
+        self.assertEqual(self.gl_instance.transfers[1]["to"], "0xFreelancer_9999")
+        self.assertEqual(self.gl_instance.transfers[1]["value"], 500)
+
+    def test_13_adjudicate_appeal_uphold_forfeits_stake(self):
+        """
+        TEST 13: High Tribunal UPHOLD verdict:
+        - Appellant frivolous stake (50) is forfeited to counterparty (client)
+        - Appellant reputation penalized by -1
+        """
+        import re
+        job_id = self.job_id
+        self.contract.jobs[job_id].status = "APPEALED"
+        self.contract.jobs[job_id].amount = MockBigInt(500)
+        self.contract.jobs[job_id].appeal_by = "0xfreelancer_9999"
+        self.contract.jobs[job_id].appeal_stake = MockBigInt(50)
+        self.contract.jobs[job_id].appeal_reason = "Frivolous groundless appeal"
+
+        self.gl_instance.nondet.web.render = lambda url, mode="text": MagicMock(content="Code content.")
+        
+        def mock_uphold_prompt(prompt, response_format="json"):
+            canary_match = re.search(r'value "([a-f0-9]{16})"', prompt)
+            canary = canary_match.group(1) if canary_match else "mock_canary"
+            return {
+                "appeal_verdict": "UPHOLD",
+                "confidence": 100,
+                "canary": canary,
+                "reason": "Tribunal finds original adjudication was entirely accurate."
+            }
+        self.gl_instance.nondet.exec_prompt = mock_uphold_prompt
+
+        self.gl_instance.transfers = []
+        self.contract.adjudicate_appeal(job_id)
+
+        job = self.contract.jobs[job_id]
+        self.assertEqual(job.status, "APPEAL_RESOLVED")
+        self.assertEqual(job.appeal_verdict, "UPHOLD")
+        
+        # 1 transfer: forfeited stake sent to counterparty client (50)
+        self.assertEqual(len(self.gl_instance.transfers), 1)
+        self.assertEqual(self.gl_instance.transfers[0]["to"], "0xClient_1111")
+        self.assertEqual(self.gl_instance.transfers[0]["value"], 50)
+
+    def test_14_user_profile_and_tier_calculation(self):
+        """
+        TEST 14: Verify user profile and Artisan Tier calculation:
+        - Score < 3: NOVICE (⭐ Bronze)
+        - 3 <= Score < 10: VERIFIED_PRO (🌟 Silver)
+        - Score >= 10: MASTER_ARTISAN (👑 Gold)
+        """
+        import json as json_mod
+
+        # Initial profile
+        prof_novice = json_mod.loads(self.contract.get_user_profile("0xUser1"))
+        self.assertEqual(prof_novice["tier"], "NOVICE")
+        self.assertIn("Bronze", prof_novice["badge"])
+
+        # Update to 5 points
+        self.contract._update_reputation("0xUser1", MockBigInt(5))
+        prof_pro = json_mod.loads(self.contract.get_user_profile("0xUser1"))
+        self.assertEqual(prof_pro["tier"], "VERIFIED_PRO")
+        self.assertIn("Silver", prof_pro["badge"])
+
+        # Update to 12 points
+        self.contract._update_reputation("0xUser1", MockBigInt(7))
+        prof_master = json_mod.loads(self.contract.get_user_profile("0xUser1"))
+        self.assertEqual(prof_master["tier"], "MASTER_ARTISAN")
+        self.assertIn("Gold", prof_master["badge"])
+
+    def test_15_withdraw_funds_vault(self):
+        """
+        TEST 15: Verify pull-withdrawal safety vault:
+        - Rejects when balance is 0
+        - Successfully transfers when balance > 0
+        """
+        # 1. Zero balance rejects
+        self.gl_instance.message.sender_address = MockAddress("0xUserVault")
+        with self.assertRaises(MockUserError):
+            self.contract.withdraw_funds()
+
+        # 2. Add balance and withdraw
+        self.contract.withdrawable_balances["0xuservault"] = MockBigInt(150)
+        self.gl_instance.transfers = []
+        self.contract.withdraw_funds()
+
+        self.assertEqual(self.contract.withdrawable_balances["0xuservault"], 0)
+        self.assertEqual(len(self.gl_instance.transfers), 1)
+        self.assertEqual(self.gl_instance.transfers[0]["to"], "0xUserVault")
+        self.assertEqual(self.gl_instance.transfers[0]["value"], 150)
+
 
 if __name__ == "__main__":
     print("=" * 75)
     print("RUNNING REGRESSION TEST SUITE FOR PAYOUT-CRITICAL PATH (GENLAYER)")
     print("=" * 75)
     unittest.main(verbosity=2)
+

@@ -64,6 +64,33 @@ export default function App() {
   const [settlementExplanation, setSettlementExplanation] = useState<string>('');
   const [userReputation, setUserReputation] = useState<string>('0');
 
+  // Milestone v3: Filter & Search states
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Milestone v3: Appeal Tribunal states
+  const [appealingJobId, setAppealingJobId] = useState<string | null>(null);
+  const [appealReason, setAppealReason] = useState<string>('');
+  const [evaluatingAppealJobId, setEvaluatingAppealJobId] = useState<string | null>(null);
+
+  // Milestone v3: User Profile & Artisan Tier
+  const [userProfile, setUserProfile] = useState<{
+    tier: string;
+    badge: string;
+    reputation: string;
+    completed_jobs: string;
+    disputes_won: string;
+  }>({
+    tier: 'NOVICE',
+    badge: '⭐ Bronze Tier',
+    reputation: '0',
+    completed_jobs: '0',
+    disputes_won: '0'
+  });
+
+  // Milestone v3: Pull-Withdrawal Safety Vault
+  const [withdrawableBalance, setWithdrawableBalance] = useState<string>('0');
+
   useEffect(() => {
     // Initialize default client for reading
     const initClient = createClient({
@@ -219,18 +246,42 @@ export default function App() {
     if (!account || !CONTRACT_ADDRESS || !client) return;
     const fetchReputation = async () => {
       try {
-        const repStr = await client.readContract({
+        const profStr = await client.readContract({
           address: CONTRACT_ADDRESS as any,
-          functionName: 'get_reputation',
+          functionName: 'get_user_profile',
           args: [account],
         });
-        const parsed = typeof repStr === 'string' ? JSON.parse(repStr) : repStr;
-        if (parsed && parsed.score !== undefined) {
-          setUserReputation(String(parsed.score));
+        const prof = typeof profStr === 'string' ? JSON.parse(profStr) : profStr;
+        if (prof && prof.tier) {
+          setUserProfile(prof);
+          setUserReputation(String(prof.reputation || '0'));
         }
       } catch (err) {
-        // Silently catch if method not deployed on old contract
+        // Fallback to get_reputation
+        try {
+          const repStr = await client.readContract({
+            address: CONTRACT_ADDRESS as any,
+            functionName: 'get_reputation',
+            args: [account],
+          });
+          const parsed = typeof repStr === 'string' ? JSON.parse(repStr) : repStr;
+          if (parsed && parsed.score !== undefined) {
+            setUserReputation(String(parsed.score));
+          }
+        } catch {}
       }
+
+      try {
+        const balStr = await client.readContract({
+          address: CONTRACT_ADDRESS as any,
+          functionName: 'get_withdrawable_balance',
+          args: [account],
+        });
+        const balObj = typeof balStr === 'string' ? JSON.parse(balStr) : balStr;
+        if (balObj && balObj.balance) {
+          setWithdrawableBalance(String(balObj.balance));
+        }
+      } catch {}
     };
     fetchReputation();
     const repInterval = setInterval(fetchReputation, 10000);
@@ -445,6 +496,79 @@ export default function App() {
     setLoading(false);
   };
 
+  const lodgeAppeal = async (jobId: string, amountWei: string) => {
+    if (!account) return setErrorMsg('Connect wallet first');
+    if (!appealReason.trim()) return setErrorMsg('Please provide an appeal reason');
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const stakeRequired = (BigInt(amountWei) / 10n) > 0n ? (BigInt(amountWei) / 10n) : 1n;
+      await client.writeContract({
+        address: CONTRACT_ADDRESS as any,
+        functionName: 'appeal_job',
+        args: [jobId, appealReason],
+        value: stakeRequired,
+        account: client.account || { address: account, type: "json-rpc" },
+      });
+      setJobs(prev => prev.map(j => j.id === jobId ? {
+        ...j,
+        status: 'APPEALED',
+        appeal_by: account,
+        appeal_stake: stakeRequired.toString(),
+        appeal_reason: appealReason,
+        __updatedAt: Date.now()
+      } : j));
+      setAppealingJobId(null);
+      setAppealReason('');
+      setTimeout(fetchJobs, 2000);
+    } catch (err: any) {
+      setErrorMsg(`Failed to lodge appeal: ${err.message || err.toString()}`);
+      clearError();
+    }
+    setLoading(false);
+  };
+
+  const adjudicateAppeal = async (jobId: string) => {
+    if (!account) return setErrorMsg('Connect wallet first');
+    setEvaluatingAppealJobId(jobId);
+    setErrorMsg(null);
+    try {
+      await client.writeContract({
+        address: CONTRACT_ADDRESS as any,
+        functionName: 'adjudicate_appeal',
+        args: [jobId],
+        value: 0n,
+        account: client.account || { address: account, type: "json-rpc" },
+      });
+      setTimeout(fetchJobs, 3000);
+    } catch (err: any) {
+      setErrorMsg(`Appeal adjudication failed: ${err.message || err.toString()}`);
+      clearError();
+      setEvaluatingAppealJobId(null);
+    }
+  };
+
+  const withdrawFunds = async () => {
+    if (!account) return setErrorMsg('Connect wallet first');
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await client.writeContract({
+        address: CONTRACT_ADDRESS as any,
+        functionName: 'withdraw_funds',
+        args: [],
+        value: 0n,
+        account: client.account || { address: account, type: "json-rpc" },
+      });
+      setWithdrawableBalance('0');
+      setTimeout(fetchJobs, 2000);
+    } catch (err: any) {
+      setErrorMsg(`Failed to withdraw: ${err.message || err.toString()}`);
+      clearError();
+    }
+    setLoading(false);
+  };
+
   const formatDeadline = (deadlineTs: string) => {
     const ts = Number(deadlineTs);
     if (!ts || ts === 0) return null;
@@ -496,21 +620,39 @@ export default function App() {
 
         <div className="mt-auto">
           {account ? (
-            <div className="glass-card rounded-lg p-3 flex items-center justify-between gap-3 group relative cursor-pointer overflow-hidden" onClick={disconnectWallet}>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                  <Wallet size={14} className="text-gray-300" />
-                </div>
-                <div className="flex flex-col overflow-hidden">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-500 font-medium uppercase">Connected</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono font-bold" title="On-chain Reputation Score">⭐ {userReputation}</span>
+            <div className="space-y-2">
+              {withdrawableBalance !== '0' && (
+                <div className="glass-panel p-2.5 rounded-lg border-emerald-500/20 bg-emerald-500/5 flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-emerald-400 font-semibold">Vault Balance</span>
+                    <span className="font-mono text-white">{(Number(withdrawableBalance) / 1e18).toFixed(2)} GEN</span>
                   </div>
-                  <span className="text-xs font-mono text-gray-200 truncate">{account.slice(0, 6)}...{account.slice(-4)}</span>
+                  <button 
+                    onClick={withdrawFunds} 
+                    disabled={loading} 
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-1 rounded text-[10px] font-bold transition-colors"
+                  >
+                    Withdraw to Wallet
+                  </button>
                 </div>
-              </div>
-              <div className="absolute inset-0 bg-red-500/20 text-red-400 font-semibold text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md">
-                Disconnect
+              )}
+              <div className="glass-card rounded-lg p-3 flex items-center justify-between gap-3 group relative cursor-pointer overflow-hidden" onClick={disconnectWallet}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                    <Wallet size={14} className="text-gray-300" />
+                  </div>
+                  <div className="flex flex-col overflow-hidden">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-gray-500 font-medium uppercase">Connected</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono font-bold" title="On-chain Reputation Score">⭐ {userReputation}</span>
+                    </div>
+                    <span className="text-xs font-mono text-gray-200 truncate">{account.slice(0, 6)}...{account.slice(-4)}</span>
+                    <span className="text-[10px] text-amber-400 font-medium">{userProfile.badge}</span>
+                  </div>
+                </div>
+                <div className="absolute inset-0 bg-red-500/20 text-red-400 font-semibold text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md">
+                  Disconnect
+                </div>
               </div>
             </div>
           ) : (
@@ -759,266 +901,398 @@ export default function App() {
             )}
 
             {/* JOBS TAB */}
-            {activeTab === 'jobs' && (
-              <div className="animate-in fade-in duration-500 space-y-6">
-                {jobs.length === 0 ? (
-                  <div className="glass-panel rounded-xl py-20 text-center flex flex-col items-center border-dashed border-white/10">
-                     <Briefcase size={32} className="mb-4 text-gray-600" />
-                     <h3 className="text-lg font-medium text-gray-400 mb-1">No Escrows Found</h3>
-                     <p className="text-sm text-gray-600">Create a job to get started.</p>
+            {activeTab === 'jobs' && (() => {
+              const filteredJobs = jobs.filter((j) => {
+                if (statusFilter === 'MINE') {
+                  if (!account) return false;
+                  const isClient = j.client && j.client.toLowerCase() === account.toLowerCase();
+                  const isFreelancer = j.freelancer && j.freelancer.toLowerCase() === account.toLowerCase();
+                  if (!isClient && !isFreelancer) return false;
+                } else if (statusFilter !== 'ALL') {
+                  if (j.status !== statusFilter) return false;
+                }
+                if (searchQuery.trim()) {
+                  const q = searchQuery.toLowerCase();
+                  const matchTitle = j.title && j.title.toLowerCase().includes(q);
+                  const matchDesc = j.description && j.description.toLowerCase().includes(q);
+                  const matchClient = j.client && j.client.toLowerCase().includes(q);
+                  const matchFreelancer = j.freelancer && j.freelancer.toLowerCase().includes(q);
+                  if (!matchTitle && !matchDesc && !matchClient && !matchFreelancer) return false;
+                }
+                return true;
+              });
+
+              return (
+                <div className="animate-in fade-in duration-500 space-y-6">
+                  {/* Search & Filter Header */}
+                  <div className="glass-panel p-4 rounded-xl flex flex-col md:flex-row gap-4 justify-between items-center">
+                    <div className="flex flex-wrap gap-1.5 w-full md:w-auto">
+                      {[
+                        { id: 'ALL', label: 'All Escrows' },
+                        { id: 'MINE', label: 'My Escrows' },
+                        { id: 'OPEN', label: 'Open' },
+                        { id: 'IN_PROGRESS', label: 'In Progress' },
+                        { id: 'APPEALED', label: 'Appealed' },
+                        { id: 'ESCALATED', label: 'Escalated' },
+                        { id: 'CLOSED', label: 'Closed' }
+                      ].map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => setStatusFilter(f.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            statusFilter === f.id
+                              ? 'bg-white text-black shadow-md'
+                              : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="w-full md:w-64">
+                      <input
+                        type="text"
+                        placeholder="Search title, desc, address..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-white/30"
+                      />
+                    </div>
                   </div>
-                ) : (
-                  jobs.map((job) => (
-                    <div key={job.id} className="glass-panel rounded-xl p-6 hover:border-white/20 transition-colors">
-                      <div className="flex flex-col lg:flex-row gap-6">
-                        
-                        {/* Job Info */}
-                        <div className="flex-1 flex flex-col">
-                          <div className="flex flex-col mb-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-lg font-semibold text-white">{job.title}</h3>
-                              <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wider uppercase ${
-                                evaluatingJobId === job.id ? 'bg-purple-500/10 text-purple-400 animate-pulse' :
-                                job.status === 'OPEN' ? 'bg-green-500/10 text-green-400' : 
-                                job.status === 'IN_PROGRESS' ? 'bg-yellow-500/10 text-yellow-500' : 
-                                job.status === 'ESCALATED' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
-                                job.status === 'CANCELLED' ? 'bg-red-500/10 text-red-400' :
-                                'bg-white/5 text-gray-400'
-                              }`}>
-                                {evaluatingJobId === job.id ? 'EVALUATING' : job.status}
-                              </span>
+
+                  {filteredJobs.length === 0 ? (
+                    <div className="glass-panel rounded-xl py-20 text-center flex flex-col items-center border-dashed border-white/10">
+                       <Briefcase size={32} className="mb-4 text-gray-600" />
+                       <h3 className="text-lg font-medium text-gray-400 mb-1">No Escrows Match</h3>
+                       <p className="text-sm text-gray-600">Try adjusting your filters or search keywords.</p>
+                    </div>
+                  ) : (
+                    filteredJobs.map((job) => (
+                      <div key={job.id} className="glass-panel rounded-xl p-6 hover:border-white/20 transition-colors">
+                        <div className="flex flex-col lg:flex-row gap-6">
+                          
+                          {/* Job Info */}
+                          <div className="flex-1 flex flex-col">
+                            <div className="flex flex-col mb-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-lg font-semibold text-white">{job.title}</h3>
+                                <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wider uppercase ${
+                                  evaluatingJobId === job.id || evaluatingAppealJobId === job.id ? 'bg-purple-500/10 text-purple-400 animate-pulse' :
+                                  job.status === 'OPEN' ? 'bg-green-500/10 text-green-400' : 
+                                  job.status === 'IN_PROGRESS' ? 'bg-yellow-500/10 text-yellow-500' : 
+                                  job.status === 'APPEALED' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 animate-pulse' :
+                                  job.status === 'APPEAL_RESOLVED' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40' :
+                                  job.status === 'ESCALATED' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
+                                  job.status === 'CANCELLED' ? 'bg-red-500/10 text-red-400' :
+                                  'bg-white/5 text-gray-400'
+                                }`}>
+                                  {evaluatingJobId === job.id ? 'AI EVALUATING' : evaluatingAppealJobId === job.id ? 'TRIBUNAL EVALUATING' : job.status}
+                                </span>
+                              </div>
+
+                              {/* Minimal Progress Bar */}
+                              <div className="flex items-center gap-1.5 mb-1 w-full max-w-sm">
+                                <div className={`h-1 flex-1 rounded-full ${job.status !== 'OPEN' ? 'bg-white/80' : 'bg-white/80'}`}></div>
+                                <div className={`h-1 flex-1 rounded-full ${job.status === 'IN_PROGRESS' || job.status === 'CLOSED' || (job.status && job.status.includes('APPEAL')) ? 'bg-white/80' : 'bg-white/10'}`}></div>
+                                <div className={`h-1 flex-1 rounded-full ${job.status === 'CLOSED' || (job.status && job.status.startsWith('SETTLED_')) || job.status === 'APPEAL_RESOLVED' ? 'bg-white/80' : 'bg-white/10'}`}></div>
+                              </div>
+                              <div className="flex justify-between text-[9px] text-gray-500 uppercase font-semibold max-w-sm">
+                                <span>Funded</span>
+                                <span className="text-center pl-6">Building</span>
+                                <span className="text-right">Closed</span>
+                              </div>
+                            </div>
+                            
+                            <p className="text-sm text-gray-400 leading-relaxed mb-6">
+                              {job.description}
+                            </p>
+                            
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-black/30 rounded-lg p-4 border border-white/5 mb-4">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[9px] text-gray-500 uppercase font-semibold">Client</span>
+                                <a href={`https://explorer-studio.genlayer.com/address/${job.client}`} target="_blank" rel="noreferrer" className="font-mono text-xs text-gray-300 hover:text-[#00E599] hover:underline truncate">
+                                  {job.client.slice(0,6)}...{job.client.slice(-4)} ↗
+                                </a>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[9px] text-gray-500 uppercase font-semibold">Amount</span>
+                                <span className="font-mono text-xs text-white">{(Number(job.amount) / 1e18).toString()} GEN</span>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[9px] text-gray-500 uppercase font-semibold">Brief</span>
+                                <a href={job.brief_url} target="_blank" rel="noreferrer" className="text-xs text-gray-300 hover:text-white hover:underline truncate">Link ↗</a>
+                              </div>
+                              {(job.deliverable_urls || job.deliverable_url) && (
+                                <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
+                                  <span className="text-[9px] text-gray-500 uppercase font-semibold">Deliverables</span>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(job.deliverable_urls || job.deliverable_url || "").split(",").map((url: string, index: number) => {
+                                      const cleanUrl = url.trim().split("\n")[0];
+                                      if (!cleanUrl) return null;
+                                      return (
+                                        <a key={index} href={cleanUrl} target="_blank" rel="noreferrer" className="text-xs text-[#00E599] hover:underline font-mono">
+                                          Link #{index + 1} ↗
+                                        </a>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
-                            {/* Minimal Progress Bar */}
-                            <div className="flex items-center gap-1.5 mb-1 w-full max-w-sm">
-                              <div className={`h-1 flex-1 rounded-full ${job.status !== 'OPEN' ? 'bg-white/80' : 'bg-white/80'}`}></div>
-                              <div className={`h-1 flex-1 rounded-full ${job.status === 'IN_PROGRESS' || job.status === 'CLOSED' ? 'bg-white/80' : 'bg-white/10'}`}></div>
-                              <div className={`h-1 flex-1 rounded-full ${job.status === 'CLOSED' ? 'bg-white/80' : 'bg-white/10'}`}></div>
-                            </div>
-                            <div className="flex justify-between text-[9px] text-gray-500 uppercase font-semibold max-w-sm">
-                              <span>Funded</span>
-                              <span className="text-center pl-6">Building</span>
-                              <span className="text-right">Closed</span>
-                            </div>
-                          </div>
-                          
-                          <p className="text-sm text-gray-400 leading-relaxed mb-6">
-                            {job.description}
-                          </p>
-                          
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-black/30 rounded-lg p-4 border border-white/5 mb-4">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[9px] text-gray-500 uppercase font-semibold">Client</span>
-                              <a href={`https://explorer-studio.genlayer.com/address/${job.client}`} target="_blank" rel="noreferrer" className="font-mono text-xs text-gray-300 hover:text-[#00E599] hover:underline truncate">
-                                {job.client.slice(0,6)}...{job.client.slice(-4)} ↗
-                              </a>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[9px] text-gray-500 uppercase font-semibold">Amount</span>
-                              <span className="font-mono text-xs text-white">{(Number(job.amount) / 1e18).toString()} GEN</span>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[9px] text-gray-500 uppercase font-semibold">Brief</span>
-                              <a href={job.brief_url} target="_blank" rel="noreferrer" className="text-xs text-gray-300 hover:text-white hover:underline truncate">Link ↗</a>
-                            </div>
-                            {(job.deliverable_urls || job.deliverable_url) && (
-                              <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
-                                <span className="text-[9px] text-gray-500 uppercase font-semibold">Deliverables</span>
-                                <div className="flex flex-wrap gap-2">
-                                  {(job.deliverable_urls || job.deliverable_url || "").split(",").map((url: string, index: number) => {
-                                    const cleanUrl = url.trim().split("\n")[0];
-                                    if (!cleanUrl) return null;
-                                    return (
-                                      <a key={index} href={cleanUrl} target="_blank" rel="noreferrer" className="text-xs text-[#00E599] hover:underline font-mono">
-                                        Link #{index + 1} ↗
-                                      </a>
-                                    );
-                                  })}
+                            {/* Deadline & Reputation Info Bar */}
+                            {(job.deadline && job.deadline !== "0") && (() => {
+                              const dl = formatDeadline(job.deadline);
+                              if (!dl) return null;
+                              return (
+                                <div className={`flex items-center justify-between p-3 rounded-lg border mb-3 ${dl.expired ? 'bg-red-500/5 border-red-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-gray-500 uppercase font-semibold">⏰ Deadline</span>
+                                    <span className={`text-xs font-mono font-semibold ${dl.expired ? 'text-red-400' : 'text-blue-400'}`}>{dl.text}</span>
+                                  </div>
+                                  {dl.expired && job.status === 'IN_PROGRESS' && account && account.toLowerCase() === (job.client || '').toLowerCase() && (
+                                    <button onClick={() => claimDeadlineRefund(job.id)} disabled={loading} className="bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 px-3 py-1.5 rounded text-[10px] font-bold transition-colors">
+                                      Claim Deadline Refund
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* AI VERDICT DISPLAY */}
+                            {job.ai_verdict && (
+                              <div className={`p-4 rounded-lg border bg-black/40 ${
+                                job.ai_verdict === 'RELEASE' ? 'border-green-500/20 text-green-100' : 
+                                job.ai_verdict === 'REFUND' ? 'border-red-500/20 text-red-100' : 
+                                'border-yellow-500/20 text-yellow-100'
+                              }`}>
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <Brain size={14} className={
+                                    job.ai_verdict === 'RELEASE' ? 'text-green-400' : 
+                                    job.ai_verdict === 'REFUND' ? 'text-red-400' : 
+                                    'text-yellow-400'
+                                  } />
+                                  <h4 className="font-semibold text-xs uppercase tracking-wider">AI Verdict: {job.ai_verdict}</h4>
+                                </div>
+                                <p className="text-xs leading-relaxed opacity-80 border-l border-white/20 pl-3">
+                                  "{job.ai_reason}"
+                                </p>
+                              </div>
+                            )}
+
+                            {/* APPEAL DETAILS DISPLAY */}
+                            {job.status === 'APPEALED' && (
+                              <div className="p-4 rounded-lg border border-purple-500/30 bg-purple-950/20 mt-3 space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                                    🏛️ High Appellate Tribunal Review Underway
+                                  </span>
+                                  <span className="text-[10px] text-purple-400 font-mono">
+                                    Stake: {(Number(job.appeal_stake) / 1e18).toFixed(2)} GEN
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-300 italic">"{job.appeal_reason}"</p>
+                                <div className="text-[10px] text-gray-500">
+                                  Appellant: <span className="font-mono text-gray-300">{job.appeal_by?.slice(0, 8)}...{job.appeal_by?.slice(-6)}</span>
                                 </div>
                               </div>
                             )}
+
+                            {job.status === 'APPEAL_RESOLVED' && (
+                              <div className="p-3.5 rounded-lg border border-indigo-500/30 bg-indigo-950/20 mt-3 text-xs space-y-1">
+                                <div className="font-semibold text-indigo-300">
+                                  🏛️ High Tribunal Final Ruling: {job.appeal_verdict}
+                                </div>
+                                <p className="text-gray-400 text-[11px] leading-relaxed">{job.ai_reason}</p>
+                              </div>
+                            )}
+
+                            {/* INLINE APPEAL FORM */}
+                            {appealingJobId === job.id && (
+                              <div className="p-4 rounded-lg bg-black/80 border border-purple-500/40 mt-3 space-y-2.5 animate-in fade-in">
+                                <div className="flex justify-between items-center">
+                                  <h5 className="text-xs font-bold text-purple-300">Lodge High Tribunal Appeal</h5>
+                                  <span className="text-[10px] text-purple-400 font-mono">Required Stake: {(Number(job.amount) / 1e19).toFixed(2)} GEN (10%)</span>
+                                </div>
+                                <textarea
+                                  className="w-full bg-black/90 border border-white/10 rounded-lg p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-400"
+                                  rows={3}
+                                  placeholder="Provide legal or technical grounds why the automated verdict was incorrect..."
+                                  value={appealReason}
+                                  onChange={(e) => setAppealReason(e.target.value)}
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button onClick={() => setAppealingJobId(null)} className="px-3 py-1.5 rounded text-xs text-gray-400 hover:text-white">Cancel</button>
+                                  <button onClick={() => lodgeAppeal(job.id, job.amount)} disabled={loading} className="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors">
+                                    Confirm & Stake {(Number(job.amount) / 1e19).toFixed(2)} GEN
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
                           </div>
 
-                          {/* Deadline & Reputation Info Bar */}
-                          {(job.deadline && job.deadline !== "0") && (() => {
-                            const dl = formatDeadline(job.deadline);
-                            if (!dl) return null;
-                            return (
-                              <div className={`flex items-center justify-between p-3 rounded-lg border ${dl.expired ? 'bg-red-500/5 border-red-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[9px] text-gray-500 uppercase font-semibold">⏰ Deadline</span>
-                                  <span className={`text-xs font-mono font-semibold ${dl.expired ? 'text-red-400' : 'text-blue-400'}`}>{dl.text}</span>
-                                </div>
-                                {dl.expired && job.status === 'IN_PROGRESS' && account && account.toLowerCase() === (job.client || '').toLowerCase() && (
-                                  <button onClick={() => claimDeadlineRefund(job.id)} disabled={loading} className="bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 px-3 py-1.5 rounded text-[10px] font-bold transition-colors">
-                                    Claim Deadline Refund
+                          {/* Action Panel */}
+                          <div className="w-full lg:w-48 lg:border-l border-white/5 lg:pl-6 flex flex-col justify-center gap-2.5">
+                            {job.id.startsWith('PENDING-') ? (
+                              <div className="w-full border border-yellow-500/20 bg-yellow-500/5 text-yellow-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-2">
+                                <div className="w-3.5 h-3.5 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                                Confirming on StudioNet...
+                              </div>
+                            ) : (
+                              <>
+                                {job.status === 'OPEN' && (
+                                  !account ? (
+                                    <button onClick={connectWallet} className="w-full bg-white text-black hover:bg-gray-200 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                                      <Wallet size={15} /> Connect to Accept
+                                    </button>
+                                  ) : (account.toLowerCase() === (job.client || '').toLowerCase()) ? (
+                                    <div className="flex flex-col gap-2">
+                                      <div className="w-full border border-dashed border-white/20 bg-white/5 text-gray-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed" title="You are the client who created this job">
+                                        <Briefcase size={14} /> Waiting for Freelancer
+                                      </div>
+                                      <button onClick={() => cancelJob(job.id)} disabled={loading} className="w-full bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 py-2 rounded-lg text-xs font-semibold transition-colors">
+                                        Cancel & Reclaim Funds
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={() => acceptJob(job.id)} disabled={loading} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                                      Accept Job
+                                    </button>
+                                  )
+                                )}
+                                
+                                {job.status === 'IN_PROGRESS' && !job.deliverable_url && (
+                                  !account ? (
+                                    <button onClick={connectWallet} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
+                                      <Wallet size={14} /> Connect to Submit
+                                    </button>
+                                  ) : (account.toLowerCase() === (job.freelancer || '').toLowerCase()) ? (
+                                    <button onClick={() => setActiveJobId(job.id)} disabled={loading} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-sm font-semibold transition-colors">
+                                      Submit Work
+                                    </button>
+                                  ) : (account.toLowerCase() === (job.client || '').toLowerCase()) ? (
+                                    <div className="w-full border border-blue-500/20 bg-blue-500/5 text-blue-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+                                      <Code2 size={14} className="animate-pulse" /> Freelancer Working...
+                                    </div>
+                                  ) : (
+                                    <div className="w-full border border-dashed border-white/10 text-gray-500 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
+                                      In Progress
+                                    </div>
+                                  )
+                                )}
+                                
+                                {job.status === 'IN_PROGRESS' && job.deliverable_url && evaluatingJobId !== job.id && (
+                                  <button onClick={() => adjudicate(job.id)} disabled={evaluatingJobId !== null || !account} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+                                    <Brain size={14} /> Evaluate
                                   </button>
                                 )}
-                              </div>
-                            );
-                          })()}
 
-                          {job.ai_verdict && (
-                            <div className={`p-4 rounded-lg border bg-black/40 ${
-                              job.ai_verdict === 'RELEASE' ? 'border-green-500/20 text-green-100' : 
-                              job.ai_verdict === 'REFUND' ? 'border-red-500/20 text-red-100' : 
-                              'border-yellow-500/20 text-yellow-100'
-                            }`}>
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <Brain size={14} className={
-                                  job.ai_verdict === 'RELEASE' ? 'text-green-400' : 
-                                  job.ai_verdict === 'REFUND' ? 'text-red-400' : 
-                                  'text-yellow-400'
-                                } />
-                                <h4 className="font-semibold text-xs uppercase tracking-wider">AI Verdict: {job.ai_verdict}</h4>
-                              </div>
-                              <p className="text-xs leading-relaxed opacity-80 border-l border-white/20 pl-3">
-                                "{job.ai_reason}"
-                              </p>
-                            </div>
-                          )}
-                        </div>
+                                {evaluatingJobId === job.id && (
+                                  <div className="w-full border border-primary/20 bg-primary/5 text-primary py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                    AI Running...
+                                  </div>
+                                )}
 
-                        {/* Action Panel */}
-                        <div className="w-full lg:w-48 lg:border-l border-white/5 lg:pl-6 flex flex-col justify-center gap-3">
-                          {job.id.startsWith('PENDING-') ? (
-                            <div className="w-full border border-yellow-500/20 bg-yellow-500/5 text-yellow-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-2">
-                              <div className="w-3.5 h-3.5 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
-                              Confirming on StudioNet...
-                            </div>
-                          ) : (
-                            <>
-                              {job.status === 'OPEN' && (
-                                !account ? (
-                                  <button onClick={connectWallet} className="w-full bg-white text-black hover:bg-gray-200 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm">
-                                    <Wallet size={15} /> Connect to Accept
+                                {job.status === 'APPEALED' && (
+                                  <button
+                                    onClick={() => adjudicateAppeal(job.id)}
+                                    disabled={evaluatingAppealJobId === job.id || !account}
+                                    className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-lg text-xs font-bold transition-colors shadow-lg shadow-purple-600/20"
+                                  >
+                                    {evaluatingAppealJobId === job.id ? 'Tribunal Reviewing...' : '⚖️ Adjudicate Appeal'}
                                   </button>
-                                ) : (account.toLowerCase() === (job.client || '').toLowerCase()) ? (
-                                  <div className="flex flex-col gap-2">
-                                    <div className="w-full border border-dashed border-white/20 bg-white/5 text-gray-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 cursor-not-allowed" title="You are the client who created this job">
-                                      <Briefcase size={14} /> Waiting for Freelancer
-                                    </div>
-                                    <button onClick={() => cancelJob(job.id)} disabled={loading} className="w-full bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 py-2 rounded-lg text-xs font-semibold transition-colors">
-                                      Cancel & Reclaim Funds
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button onClick={() => acceptJob(job.id)} disabled={loading} className="w-full bg-white text-black hover:bg-gray-200 disabled:bg-white/10 disabled:text-gray-500 py-2.5 rounded-lg text-sm font-semibold transition-colors">
-                                    Accept Job
-                                  </button>
-                                )
-                              )}
-                              
-                              {job.status === 'IN_PROGRESS' && !job.deliverable_url && (
-                                !account ? (
-                                  <button onClick={connectWallet} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
-                                    <Wallet size={14} /> Connect to Submit
-                                  </button>
-                                ) : (account.toLowerCase() === (job.freelancer || '').toLowerCase()) ? (
-                                  <button onClick={() => setActiveJobId(job.id)} disabled={loading} className="w-full bg-transparent border border-white/20 text-white hover:bg-white/5 py-2.5 rounded-lg text-sm font-semibold transition-colors">
-                                    Submit Work
-                                  </button>
-                                ) : (account.toLowerCase() === (job.client || '').toLowerCase()) ? (
-                                  <div className="w-full border border-blue-500/20 bg-blue-500/5 text-blue-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
-                                    <Code2 size={14} className="animate-pulse" /> Freelancer Working...
-                                  </div>
-                                ) : (
+                                )}
+
+                                {(job.status === 'CLOSED' || (job.status && job.status.startsWith('SETTLED_')) || job.status === 'APPEAL_RESOLVED') && (
                                   <div className="w-full border border-dashed border-white/10 text-gray-500 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5">
-                                    In Progress
+                                    <Shield size={14} /> {job.status === 'APPEAL_RESOLVED' ? 'Tribunal Resolved' : job.status.startsWith('SETTLED_') ? `Resolved: ${job.status.replace('SETTLED_', '')}` : 'Resolved'}
                                   </div>
-                                )
-                              )}
-                              
-                              {job.status === 'IN_PROGRESS' && job.deliverable_url && evaluatingJobId !== job.id && (
-                                <button onClick={() => adjudicate(job.id)} disabled={evaluatingJobId !== null || !account} className="w-full bg-primary/10 border border-primary/20 hover:bg-primary/20 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
-                                  <Brain size={14} /> Evaluate
-                                </button>
-                              )}
+                                )}
 
-                              {evaluatingJobId === job.id && (
-                                <div className="w-full border border-primary/20 bg-primary/5 text-primary py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
-                                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                  AI Running...
-                                </div>
-                              )}
+                                {/* Lodge Appeal Button for CLOSED or ESCALATED */}
+                                {account && (account.toLowerCase() === (job.client || '').toLowerCase() || account.toLowerCase() === (job.freelancer || '').toLowerCase()) && (job.status === 'CLOSED' || job.status === 'ESCALATED' || (job.status && job.status.startsWith('SETTLED_'))) && !job.appeal_by && (
+                                  <button
+                                    onClick={() => setAppealingJobId(appealingJobId === job.id ? null : job.id)}
+                                    className="w-full bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-300 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                                  >
+                                    🏛️ Lodge Appeal
+                                  </button>
+                                )}
 
-                              {(job.status === 'CLOSED' || job.status.startsWith('SETTLED_')) && (
-                                <div className="w-full border border-dashed border-white/10 text-gray-500 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5">
-                                  <Shield size={14} /> {job.status.startsWith('SETTLED_') ? `Resolved: ${job.status.replace('SETTLED_', '')}` : 'Resolved'}
-                                </div>
-                              )}
-
-                              {job.status === 'ESCALATED' && (
-                                <div className="flex flex-col gap-2 w-full">
-                                  <div className="w-full border border-dashed border-orange-500/20 bg-orange-500/5 text-orange-400 py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 text-center px-2">
-                                    <AlertTriangle size={12} className="shrink-0" /> Escalated (Funds Locked)
-                                  </div>
-                                  {account && (account.toLowerCase() === (job.client || '').toLowerCase() || account.toLowerCase() === (job.freelancer || '').toLowerCase()) ? (
-                                    resolvingJobId === job.id ? (
-                                      <div className="flex flex-col gap-2 p-3 rounded-lg bg-white/[0.02] border border-white/5 mt-1 text-left w-full">
-                                        <label className="text-[9px] uppercase text-gray-500 font-bold tracking-wider">Settlement Option</label>
-                                        <select 
-                                          className="bg-black text-xs text-white border border-white/10 p-2 rounded focus:outline-none focus:border-white/30"
-                                          value={settlementType}
-                                          onChange={e => setSettlementType(e.target.value)}
-                                        >
-                                          <option value="SPLIT">50/50 Split Escrow</option>
-                                          {account.toLowerCase() === (job.client || '').toLowerCase() && (
-                                            <option value="CLIENT_CONCEDE">Concede (100% to Freelancer)</option>
-                                          )}
-                                          {account.toLowerCase() === (job.freelancer || '').toLowerCase() && (
-                                            <option value="FREELANCER_CONCEDE">Concede (100% to Client)</option>
-                                          )}
-                                        </select>
-                                        
-                                        <label className="text-[9px] uppercase text-gray-500 font-bold tracking-wider mt-1">Settlement Description</label>
-                                        <input 
-                                          type="text" 
-                                          className="bg-black text-xs text-white border border-white/10 p-2 rounded focus:outline-none focus:border-white/30"
-                                          placeholder="e.g. Agreed to split remaining work"
-                                          value={settlementExplanation}
-                                          onChange={e => setSettlementExplanation(e.target.value)}
-                                        />
-                                        
-                                        <div className="flex gap-2 mt-1">
-                                          <button 
-                                            onClick={() => resolveEscalated(job.id)}
-                                            disabled={loading}
-                                            className="flex-1 bg-[#00E599] text-black text-xs font-semibold py-1.5 rounded hover:bg-[#00c580] disabled:bg-[#00E599]/20 disabled:text-gray-500"
+                                {job.status === 'ESCALATED' && (
+                                  <div className="flex flex-col gap-2 w-full">
+                                    <div className="w-full border border-dashed border-orange-500/20 bg-orange-500/5 text-orange-400 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 text-center px-2">
+                                      <AlertTriangle size={12} className="shrink-0" /> Escalated
+                                    </div>
+                                    {account && (account.toLowerCase() === (job.client || '').toLowerCase() || account.toLowerCase() === (job.freelancer || '').toLowerCase()) ? (
+                                      resolvingJobId === job.id ? (
+                                        <div className="flex flex-col gap-2 p-3 rounded-lg bg-white/[0.02] border border-white/5 mt-1 text-left w-full">
+                                          <label className="text-[9px] uppercase text-gray-500 font-bold tracking-wider">Settlement Option</label>
+                                          <select 
+                                            className="bg-black text-xs text-white border border-white/10 p-2 rounded focus:outline-none focus:border-white/30"
+                                            value={settlementType}
+                                            onChange={e => setSettlementType(e.target.value)}
                                           >
-                                            Confirm
-                                          </button>
-                                          <button 
-                                            onClick={() => setResolvingJobId(null)}
-                                            className="flex-1 bg-white/10 text-white text-xs font-semibold py-1.5 rounded hover:bg-white/20"
-                                          >
-                                            Cancel
-                                          </button>
+                                            <option value="SPLIT">50/50 Split Escrow</option>
+                                            {account.toLowerCase() === (job.client || '').toLowerCase() && (
+                                              <option value="CLIENT_CONCEDE">Concede (100% to Freelancer)</option>
+                                            )}
+                                            {account.toLowerCase() === (job.freelancer || '').toLowerCase() && (
+                                              <option value="FREELANCER_CONCEDE">Concede (100% to Client)</option>
+                                            )}
+                                          </select>
+                                          
+                                          <label className="text-[9px] uppercase text-gray-500 font-bold tracking-wider mt-1">Settlement Description</label>
+                                          <input 
+                                            type="text" 
+                                            className="bg-black text-xs text-white border border-white/10 p-2 rounded focus:outline-none focus:border-white/30"
+                                            placeholder="e.g. Agreed to split remaining work"
+                                            value={settlementExplanation}
+                                            onChange={e => setSettlementExplanation(e.target.value)}
+                                          />
+                                          
+                                          <div className="flex gap-2 mt-1">
+                                            <button 
+                                              onClick={() => resolveEscalated(job.id)}
+                                              disabled={loading}
+                                              className="flex-1 bg-[#00E599] text-black text-xs font-semibold py-1.5 rounded hover:bg-[#00c580] disabled:bg-[#00E599]/20 disabled:text-gray-500"
+                                            >
+                                              Confirm
+                                            </button>
+                                            <button 
+                                              onClick={() => setResolvingJobId(null)}
+                                              className="flex-1 bg-white/10 text-white text-xs font-semibold py-1.5 rounded hover:bg-white/20"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
                                         </div>
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        onClick={() => {
-                                          setResolvingJobId(job.id);
-                                          setSettlementType('SPLIT');
-                                        }}
-                                        className="w-full bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 text-orange-300 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                                      >
-                                        Resolve Dispute
-                                      </button>
-                                    )
-                                  ) : null}
-                                </div>
-                              )}
-                            </>
-                          )}
+                                      ) : (
+                                        <button 
+                                          onClick={() => {
+                                            setResolvingJobId(job.id);
+                                            setSettlementType('SPLIT');
+                                          }}
+                                          className="w-full bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 text-orange-300 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                                        >
+                                          Resolve Dispute
+                                        </button>
+                                      )
+                                    ) : null}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+                    ))
+                  )}
+                </div>
+              );
+            })()}
           </div>
           
           {/* RICH FOOTER */}

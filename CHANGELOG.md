@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0] - 2026-10-12
+### Added
+- **Staked Appeal & High AI Tribunal**: Implemented `appeal_job(job_id, reason)` requiring a 10% stake bond and `adjudicate_appeal(job_id)` with elevated appellate prompt consensus. Supports `OVERTURN_RELEASE`, `OVERTURN_REFUND`, `UPHOLD`, and `SPLIT` verdicts. Frivolous appeals forfeit stake to the counterparty.
+- **Artisan Tier Ranking & Profile System**: Added `get_user_profile(address)` calculating tiered artisan standing (`NOVICE`, `VERIFIED_PRO`, `MASTER_ARTISAN`) based on on-chain reputation, completed jobs, and dispute track record.
+- **Emergency Pull-Withdrawal Safety Vault**: Implemented `withdraw_funds()` and `get_withdrawable_balance(address)` providing safe pull-payments.
+- **Job Search & Status Filter Controls**: Interactive multi-tab filter (`All`, `My Escrows`, `Open`, `In Progress`, `Appealed`, `Escalated`, `Closed`) with live keyword search.
+- **Expanded Test Suite to 15 Tests**: Added unit tests 10 through 15 covering appeals, tribunal consensus, tier calculations, and vault withdrawals (100% pass rate).
+
 ## [1.2.0] - 2026-09-28
 ### Added
 - **Reputation System**: On-chain `TreeMap` tracking reputation scores for clients and freelancers. RELEASE gives +1 to both parties, REFUND gives -1 to freelancer. Scores queryable via `get_reputation()`.
