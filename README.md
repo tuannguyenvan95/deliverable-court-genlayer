@@ -24,11 +24,17 @@ python -m unittest tests/test_payout_critical_path.py -v
 7. `test_07_cancel_open_job`: Verifies client cancellation of OPEN jobs with full escrow refund.
 8. `test_08_deadline_refund`: Verifies automated refund when freelancer misses deadline.
 9. `test_09_reputation_tracking`: Verifies on-chain reputation scoring.
+10. `test_10_appeal_job_validation`: Verifies appeal stake and authorization constraints.
+11. `test_11_appeal_job_success_staked`: Verifies appeal submission with 10% stake bond.
+12. `test_12_adjudicate_appeal_overturn_release`: Verifies High Tribunal OVERTURN_RELEASE verdict.
+13. `test_13_adjudicate_appeal_uphold_forfeits_stake`: Verifies High Tribunal UPHOLD verdict with stake forfeiture.
+14. `test_14_user_profile_and_tier_calculation`: Verifies Novice, Verified Pro, and Master Artisan tier rankings.
+15. `test_15_withdraw_funds_vault`: Verifies pull-withdrawal safety vault.
 
 ## Deployed Contract (Latest Verified Build)
-- Address: `0xEA3787c9C87F33e77c0e41F75E629903dcEa1bA3`
-- Explorer Link: https://explorer-studio.genlayer.com/address/0xEA3787c9C87F33e77c0e41F75E629903dcEa1bA3
-- Studio Contract Link: https://studio.genlayer.com/contracts/0xEA3787c9C87F33e77c0e41F75E629903dcEa1bA3
+- Address: `0xfd1E244b34fE6c663e100Fb81fa377057767533b`
+- Explorer Link: https://explorer-studio.genlayer.com/address/0xfd1E244b34fE6c663e100Fb81fa377057767533b
+- Studio Contract Link: https://studio.genlayer.com/contracts/0xfd1E244b34fE6c663e100Fb81fa377057767533b
 
 ## Live App
 - Vercel URL: https://deliverable-court-genlayer.vercel.app
